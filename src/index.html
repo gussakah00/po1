@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cerita di Sekitarmu</title>
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="app.webmanifest" />
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#87CEFA" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Icons -->
+    <link rel="icon" href="icons/icon-192x192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
+
+    <!-- Leaflet CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+    />
+  </head>
+  <body>
+    <a
+      href="#main-content"
+      class="skip-link"
+      aria-label="Lewati ke Konten Utama"
+    >
+      Lewati ke Konten Utama
+    </a>
+
+    <header>
+      <div class="main-header container">
+        <a class="brand-name" href="#/beranda">Cerita di Sekitarmu</a>
+
+        <nav id="navigation-drawer" class="navigation-drawer">
+          <ul id="nav-list" class="nav-list">
+            <!-- Navigation items akan diisi oleh navigation.js -->
+          </ul>
+        </nav>
+
+        <button id="drawer-button" class="drawer-button">☰</button>
+      </div>
+    </header>
+
+    <main id="main-content" class="main-content" tabindex="-1"></main>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+    <script>
+      // Register Service Worker
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("/sw.js")
+            .then((registration) => {
+              console.log(
+                "Service Worker registered successfully:",
+                registration
+              );
+            })
+            .catch((error) => {
+              console.log("Service Worker registration failed:", error);
+            });
+        });
+      }
+
+      // Install Prompt
+      let deferredPrompt;
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        showInstallPromotion();
+      });
+
+      function showInstallPromotion() {
+        const installButton = document.createElement("button");
+        installButton.textContent = "📱 Install Aplikasi";
+        installButton.className = "install-button";
+        installButton.style.cssText = `
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          padding: 12px 20px;
+          background: lightskyblue;
+          color: white;
+          border: none;
+          border-radius: 25px;
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          z-index: 1000;
+          font-size: 14px;
+        `;
+
+        installButton.addEventListener("click", async () => {
+          if (!deferredPrompt) return;
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          console.log(`User response: ${outcome}`);
+          deferredPrompt = null;
+          installButton.remove();
+        });
+
+        document.body.appendChild(installButton);
+      }
+    </script>
+  </body>
+</html>
