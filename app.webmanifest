@@ -1,6 +1,6 @@
 {
   "name": "Cerita di Sekitarmu",
-  "short_name": "CeritaSekitarmu",
+  "short_name": "CeritaSekitar",
   "description": "Aplikasi berbagi cerita berbasis lokasi dengan PWA",
   "start_url": "/po1/",
   "display": "standalone",
@@ -57,22 +57,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "screenshots/screenshot-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Halaman Beranda Cerita di Sekitarmu"
-    },
-    {
-      "src": "screenshots/screenshot-narrow.png",
-      "sizes": "720x1280",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Halaman Beranda Mobile"
     }
   ]
 }
