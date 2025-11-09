@@ -4,7 +4,14 @@ import "leaflet/dist/leaflet.css";
 import { registerSW } from "./utils/sw-register.js";
 import L from "leaflet";
 
-console.log("Initializing PWA features...");
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "/po1/leaflet-images/marker-icon-2x.png",
+  iconUrl: "/po1/leaflet-images/marker-icon.png",
+  shadowUrl: "/po1/leaflet-images/marker-shadow.png",
+});
+
+console.log("🚀 Initializing Cerita di Sekitarmu...");
 
 const app = new App({
   drawerButton: document.querySelector("#drawer-button"),
@@ -17,33 +24,19 @@ window.addEventListener("load", async () => {
   await app.renderPage();
   console.log("✅ App rendered successfully");
 
-  try {
-    await registerSW();
-    console.log("✅ PWA features initialized successfully");
-  } catch (error) {
-    console.log("⚠️ PWA features partially initialized (SW failed)");
+  if (!window.location.hostname.includes("localhost")) {
+    try {
+      console.log("🌐 Production: Registering Service Worker...");
+      await registerSW();
+    } catch (error) {
+      console.log("⚠️ Service Worker registration skipped");
+    }
   }
 });
 
 let deferredPrompt;
-const installButton = document.getElementById("install-button");
-
 window.addEventListener("beforeinstallprompt", (e) => {
-  console.log("📱 Before install prompt triggered");
+  console.log("📱 Install prompt available");
   e.preventDefault();
   deferredPrompt = e;
-  console.log("📦 App can be installed");
-
-  if (installButton) {
-    installButton.style.display = "block";
-    installButton.addEventListener("click", async () => {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`👤 User ${outcome} the install`);
-        deferredPrompt = null;
-        installButton.style.display = "none";
-      }
-    });
-  }
 });
