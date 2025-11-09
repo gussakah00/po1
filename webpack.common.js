@@ -21,27 +21,18 @@ module.exports = {
         {
           from: "src/public",
           to: "",
-          globOptions: {
-            ignore: ["**/generate-icons.js"],
-          },
+          noErrorOnMissing: true,
         },
-        // Salin sw.js dari root
+        // Pastikan sw.js disalin
         {
           from: "sw.js",
           to: "sw.js",
+          noErrorOnMissing: true,
         },
-        // Salin app.webmanifest
         {
           from: "app.webmanifest",
           to: "app.webmanifest",
-        },
-        // Salin file lain di root jika ada
-        {
-          from: "*.json",
-          to: "",
-          globOptions: {
-            ignore: ["**/package*.json", "**/tsconfig.json"],
-          },
+          noErrorOnMissing: true,
         },
       ],
     }),
