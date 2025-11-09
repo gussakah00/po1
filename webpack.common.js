@@ -23,6 +23,7 @@ module.exports = {
           to: "",
           noErrorOnMissing: true,
         },
+
         {
           from: "sw.js",
           to: "sw.js",
@@ -33,9 +34,11 @@ module.exports = {
           to: "app.webmanifest",
           noErrorOnMissing: false,
         },
+
         {
           from: "node_modules/leaflet/dist/images",
           to: "leaflet-images",
+          noErrorOnMissing: true,
         },
       ],
     }),
