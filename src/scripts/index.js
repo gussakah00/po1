@@ -1,9 +1,23 @@
 import App from "./pages/app.js";
 import "../styles/styles.css";
 import "leaflet/dist/leaflet.css";
-import { registerSW } from "./utils/sw-register.js";
 
-console.log("Initializing PWA features...");
+// CONDITIONAL IMPORT: Only import SW utils in production
+let registerSW;
+if (
+  !window.location.hostname.includes("localhost") &&
+  !window.location.hostname.includes("127.0.0.1")
+) {
+  import("./utils/sw-register.js")
+    .then((module) => {
+      registerSW = module.registerSW;
+    })
+    .catch(() => {
+      console.log("SW utilities not available");
+    });
+}
+
+console.log("Initializing app...");
 
 const app = new App({
   drawerButton: document.querySelector("#drawer-button"),
@@ -11,38 +25,31 @@ const app = new App({
   content: document.querySelector("#main-content"),
 });
 
-registerSW();
-
+// Initialize App
 window.addEventListener("hashchange", () => app.renderPage());
-window.addEventListener("load", () => {
-  app.renderPage();
-  console.log("PWA features initialized successfully");
+window.addEventListener("load", async () => {
+  await app.renderPage();
+
+  // 🚫 ONLY register SW in PRODUCTION
+  const isDevelopment =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1" ||
+    window.location.port === "3000";
+
+  if (!isDevelopment && typeof registerSW === "function") {
+    console.log("🌐 Production - Registering Service Worker");
+    await registerSW();
+  } else {
+    console.log("💻 Development - Service Worker disabled");
+  }
+
+  console.log("✅ App initialized successfully");
 });
 
+// Install prompt (bisa tetap aktif)
 let deferredPrompt;
-
 window.addEventListener("beforeinstallprompt", (e) => {
-  console.log("Before install prompt triggered");
-
   e.preventDefault();
-  r;
   deferredPrompt = e;
-  console.log("App can be installed");
-
-  const installButton = document.getElementById("install-button");
-  if (installButton) {
-    installButton.style.display = "block";
-    installButton.addEventListener("click", () => {
-      deferredPrompt.prompt();
-
-      deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === "accepted") {
-          console.log("User accepted the install prompt");
-        } else {
-          console.log("User dismissed the install prompt");
-        }
-        deferredPrompt = null;
-      });
-    });
-  }
+  console.log("📱 App can be installed");
 });

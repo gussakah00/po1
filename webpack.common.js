@@ -23,16 +23,16 @@ module.exports = {
           to: "",
           noErrorOnMissing: true,
         },
-        // Pastikan sw.js disalin
+        // PASTIKAN sw.js DISALIN
         {
           from: "sw.js",
           to: "sw.js",
-          noErrorOnMissing: true,
+          noErrorOnMissing: false, // false agar error jika file tidak ditemukan
         },
         {
           from: "app.webmanifest",
           to: "app.webmanifest",
-          noErrorOnMissing: true,
+          noErrorOnMissing: false,
         },
       ],
     }),
