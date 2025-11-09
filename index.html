@@ -1,4 +1,144 @@
 <!doctype html><html lang="id"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Cerita di Sekitarmu</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin=""/><link rel="manifest" href="app.webmanifest" crossorigin="use-credentials"/><meta name="theme-color" content="#1976d2"/><meta name="apple-mobile-web-app-status-bar-style" content="default"/><meta name="apple-mobile-web-app-capable" content="yes"/><meta name="mobile-web-app-capable" content="yes"/><meta name="apple-mobile-web-app-title" content="CeritaSekitar"/><link rel="icon" href="icons/icon-192x192.png" type="image/png"/><link rel="apple-touch-icon" href="icons/icon-192x192.png"/><style>/* CSS Styles untuk aplikasi */
+      @view-transition {
+        navigation: auto;
+      }
+
+      /* Transisi SLIDE LEFT (Kanan ke Kiri) - untuk next page */
+      ::view-transition-old(page-slide-left) {
+        animation: 0.4s cubic-bezier(0.4, 0, 0.2, 1) both slide-out-to-left;
+      }
+
+      ::view-transition-new(page-slide-left) {
+        animation: 0.4s cubic-bezier(0.4, 0, 0.2, 1) both slide-in-from-right;
+      }
+
+      /* Transisi SLIDE RIGHT (Kiri ke Kanan) - untuk back/previous page */
+      ::view-transition-old(page-slide-right) {
+        animation: 0.4s cubic-bezier(0.4, 0, 0.2, 1) both slide-out-to-right;
+      }
+
+      ::view-transition-new(page-slide-right) {
+        animation: 0.4s cubic-bezier(0.4, 0, 0.2, 1) both slide-in-from-left;
+      }
+
+      /* Transisi FADE - untuk same page atau default */
+      ::view-transition-old(page-fade) {
+        animation: 0.3s ease-out both fade-out;
+      }
+
+      ::view-transition-new(page-fade) {
+        animation: 0.3s ease-out both fade-in;
+      }
+
+      /* Transisi SLIDE IN - untuk first load */
+      ::view-transition-old(page-slide-in) {
+        animation: none;
+        display: none;
+      }
+
+      ::view-transition-new(page-slide-in) {
+        animation: 0.4s cubic-bezier(0.4, 0, 0.2, 1) both slide-in-from-right;
+      }
+
+      /* KEYFRAMES untuk animasi */
+      @keyframes slide-in-from-right {
+        from {
+          transform: translateX(100%);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      @keyframes slide-out-to-left {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(-100%);
+          opacity: 0.8;
+        }
+      }
+
+      @keyframes slide-in-from-left {
+        from {
+          transform: translateX(-100%);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      @keyframes slide-out-to-right {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0.8;
+        }
+      }
+
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes fade-out {
+        from {
+          opacity: 1;
+          transform: scale(1);
+        }
+        to {
+          opacity: 0;
+          transform: scale(1.05);
+        }
+      }
+
+      /* Class untuk fallback (browser tanpa View Transitions) */
+      .slide-left-transition {
+        animation: 0.4s ease-out slide-in-from-right;
+      }
+
+      .slide-right-transition {
+        animation: 0.4s ease-out slide-in-from-left;
+      }
+
+      .fade-transition {
+        animation: 0.3s ease-out fade-in;
+      }
+
+      .slide-in-transition {
+        animation: 0.4s ease-out slide-in-from-right;
+      }
+
+      /* Pastikan konten utama tidak memiliki view-transition-name default */
+      .main-content {
+        view-transition-name: none;
+        position: relative;
+      }
+
+      /* Smooth scrolling untuk seluruh halaman */
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* Loading state selama transisi */
+      .main-content[style*="opacity: 0.7"] {
+        pointer-events: none;
+      }
       * {
         margin: 0;
         padding: 0;
