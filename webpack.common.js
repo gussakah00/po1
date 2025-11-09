@@ -23,16 +23,15 @@ module.exports = {
           to: "",
           noErrorOnMissing: true,
         },
-        // ✅ AMBIL sw.js DARI src/public
         {
-          from: "src/public/sw.js",
+          from: "sw.js",
           to: "sw.js",
-          noErrorOnMissing: false,
+          noErrorOnMissing: true,
         },
         {
           from: "app.webmanifest",
           to: "app.webmanifest",
-          noErrorOnMissing: false,
+          noErrorOnMissing: true,
         },
         {
           from: "node_modules/leaflet/dist/images",
