@@ -25,20 +25,54 @@ class PushManager {
       }
 
       try {
-        this.registration = await navigator.serviceWorker.ready;
+        // Di development, gunakan localStorage untuk simulasi
+        if (this._isDevelopment()) {
+          console.log("PushManager: Development mode - using localStorage");
+          const stored = localStorage.getItem("pushSubscription");
+          this.isSubscribed = !!stored;
+          this._isInitialized = true;
+          resolve(true);
+          return;
+        }
+
+        // Di production, gunakan service worker
+        if (navigator.serviceWorker.controller) {
+          this.registration = await navigator.serviceWorker.ready;
+        } else {
+          console.log("PushManager: Registering Service Worker...");
+          this.registration = await navigator.serviceWorker.register(
+            "/po1/sw.js",
+            {
+              scope: "/po1/",
+            }
+          );
+          console.log("PushManager: Service Worker registered");
+        }
+
         console.log("PushManager: Service Worker ready");
 
+        // Cek subscription status
         this.subscription =
           await this.registration.pushManager.getSubscription();
-        this.isSubscribed = !(this.subscription === null);
+        this.isSubscribed = !!this.subscription;
 
         this._isInitialized = true;
         console.log("PushManager: Initialized, subscribed:", this.isSubscribed);
         resolve(true);
       } catch (error) {
         console.error("PushManager: Init error:", error);
-        this._isInitialized = true;
-        resolve(false);
+
+        // Fallback ke localStorage di development
+        if (this._isDevelopment()) {
+          console.log("PushManager: Development fallback to localStorage");
+          const stored = localStorage.getItem("pushSubscription");
+          this.isSubscribed = !!stored;
+          this._isInitialized = true;
+          resolve(true);
+        } else {
+          this._isInitialized = true;
+          resolve(false);
+        }
       }
     });
 
@@ -46,7 +80,16 @@ class PushManager {
   }
 
   _isSupported() {
-    return "serviceWorker" in navigator && "PushManager" in window;
+    const isSupported = "serviceWorker" in navigator && "PushManager" in window;
+    console.log("PushManager: Supported:", isSupported);
+    return isSupported;
+  }
+
+  _isDevelopment() {
+    return (
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+    );
   }
 
   async subscribe() {
@@ -54,18 +97,38 @@ class PushManager {
       await this.init();
     }
 
-    if (!this.registration) {
-      throw new Error("Service Worker not ready");
-    }
-
     try {
+      console.log("PushManager: Requesting notification permission...");
       const permission = await Notification.requestPermission();
+
       if (permission !== "granted") {
         throw new Error("Izin notifikasi ditolak");
       }
 
+      // Di development, simpan status di localStorage
+      if (this._isDevelopment()) {
+        console.log("PushManager: Development mode - storing in localStorage");
+        localStorage.setItem(
+          "pushSubscription",
+          JSON.stringify({
+            endpoint: "development-mode",
+            keys: { p256dh: "dev", auth: "dev" },
+          })
+        );
+        this.isSubscribed = true;
+
+        this._showLocalNotification(
+          "🔔 Notifikasi Diaktifkan",
+          "Anda akan menerima notifikasi cerita baru."
+        );
+        return true;
+      }
+
+      console.log("PushManager: Permission granted, subscribing...");
+
       // Unsubscribe existing subscription first
       if (this.subscription) {
+        console.log("PushManager: Unsubscribing existing subscription...");
         await this.unsubscribe();
       }
 
@@ -78,21 +141,20 @@ class PushManager {
 
       this.isSubscribed = true;
 
-      // Simpan endpoint ke localStorage untuk backup
+      // Simpan ke localStorage untuk backup
       const subscriptionJSON = this.subscription.toJSON();
-      localStorage.setItem("lastPushEndpoint", subscriptionJSON.endpoint);
-      console.log(
-        "PushManager: Subscription created and endpoint saved to localStorage"
+      localStorage.setItem(
+        "pushSubscription",
+        JSON.stringify(subscriptionJSON)
       );
+      console.log("PushManager: Subscription created and saved");
 
-      console.log("PushManager: Subscription created:", this.subscription);
-
-      // Coba kirim ke server, tapi jangan block jika gagal
-      const serverResult = await this._sendSubscriptionToServer();
-      if (!serverResult.success) {
-        console.warn(
-          "PushManager: Server subscription failed, but local subscription created"
-        );
+      // Coba kirim ke server
+      try {
+        await this._sendSubscriptionToServer();
+        console.log("PushManager: Subscription sent to server successfully");
+      } catch (serverError) {
+        console.warn("PushManager: Server subscription failed:", serverError);
       }
 
       this._showLocalNotification(
@@ -112,34 +174,45 @@ class PushManager {
   }
 
   async unsubscribe() {
-    if (!this.subscription) {
-      // Coba hapus dari server berdasarkan endpoint yang tersimpan
-      await this._removeSubscriptionFromServer();
-      this.isSubscribed = false;
-      localStorage.removeItem("lastPushEndpoint");
-      return true;
-    }
+    console.log("PushManager: Unsubscribing...");
 
     try {
-      // Coba unsubscribe dari push service
-      const success = await this.subscription.unsubscribe();
-
-      // Jika unsubscribe gagal, tetap lanjutkan dengan menghapus lokal
-      if (!success) {
-        console.warn(
-          "PushManager: Unsubscribe returned false, but continuing with local cleanup"
+      // Di development, hapus dari localStorage
+      if (this._isDevelopment()) {
+        console.log(
+          "PushManager: Development mode - removing from localStorage"
         );
-        // Jangan throw error, lanjutkan dengan cleanup lokal
+        localStorage.removeItem("pushSubscription");
+        this.isSubscribed = false;
+
+        this._showLocalNotification(
+          "🔕 Notifikasi Dimatikan",
+          "Anda tidak akan menerima notifikasi lagi."
+        );
+        return true;
       }
 
-      // SELALU lakukan cleanup lokal meskipun unsubscribe gagal
+      // Di production, unsubscribe dari push service
+      if (this.subscription) {
+        console.log("PushManager: Unsubscribing from push service...");
+        const success = await this.subscription.unsubscribe();
+
+        if (!success) {
+          console.warn("PushManager: Unsubscribe returned false");
+        }
+      }
+
+      // Cleanup
       this.subscription = null;
       this.isSubscribed = false;
-      localStorage.removeItem("lastPushEndpoint");
+      localStorage.removeItem("pushSubscription");
 
-      // Coba hapus dari server (tapi jangan block jika gagal)
+      console.log("PushManager: Local cleanup complete");
+
+      // Coba hapus dari server
       try {
         await this._removeSubscriptionFromServer();
+        console.log("PushManager: Server unsubscription successful");
       } catch (serverError) {
         console.warn("PushManager: Server unsubscription failed:", serverError);
       }
@@ -149,30 +222,20 @@ class PushManager {
         "Anda tidak akan menerima notifikasi lagi."
       );
 
-      return true; // Selanggap return true karena cleanup lokal berhasil
+      return true;
     } catch (error) {
       console.error("PushManager: Unsubscribe error:", error);
 
-      // Tetap lakukan cleanup lokal meskipun ada error
+      // Tetap lakukan cleanup meskipun ada error
       this.subscription = null;
       this.isSubscribed = false;
-      localStorage.removeItem("lastPushEndpoint");
-
-      // Tetap coba hapus dari server
-      try {
-        await this._removeSubscriptionFromServer();
-      } catch (serverError) {
-        console.warn(
-          "PushManager: Server unsubscription failed during error cleanup:",
-          serverError
-        );
-      }
+      localStorage.removeItem("pushSubscription");
 
       this._showLocalNotification(
         "⚠️ Peringatan",
-        "Notifikasi dimatikan secara lokal, tetapi mungkin masih aktif di server."
+        "Notifikasi dimatikan secara lokal."
       );
-      return true; // Kembalikan true karena cleanup lokal berhasil
+      return true;
     }
   }
 
@@ -190,7 +253,6 @@ class PushManager {
     try {
       const subscriptionJSON = this.subscription.toJSON();
 
-      // Pastikan format data sesuai dengan yang diharapkan server
       const requestBody = {
         endpoint: subscriptionJSON.endpoint,
         keys: {
@@ -199,7 +261,7 @@ class PushManager {
         },
       };
 
-      console.log("PushManager: Sending subscription to server:", requestBody);
+      console.log("PushManager: Sending subscription to server");
 
       const response = await fetch(
         "https://story-api.dicoding.dev/v1/notifications/subscribe",
@@ -214,31 +276,11 @@ class PushManager {
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          "PushManager: Server returned error:",
-          response.status,
-          errorText
-        );
-
-        if (response.status === 400) {
-          return {
-            success: false,
-            error:
-              "Bad Request - Mungkin subscription sudah ada atau format salah",
-          };
-        } else if (response.status === 401) {
-          return {
-            success: false,
-            error: "Unauthorized - Token mungkin expired",
-          };
-        }
-
-        throw new Error(`Server returned ${response.status}: ${errorText}`);
+        throw new Error(`Server returned ${response.status}`);
       }
 
       const result = await response.json();
-      console.log("PushManager: Subscription saved on server:", result);
+      console.log("PushManager: Subscription saved on server");
       return { success: true, data: result };
     } catch (error) {
       console.warn(
@@ -256,14 +298,17 @@ class PushManager {
       return { success: false, error: "No auth token" };
     }
 
-    // Jika tidak ada subscription, tetap coba hapus berdasarkan endpoint yang tersimpan
     let endpoint;
     if (this.subscription) {
       const subscriptionJSON = this.subscription.toJSON();
       endpoint = subscriptionJSON.endpoint;
     } else {
-      // Coba dapatkan endpoint dari localStorage sebagai fallback
-      endpoint = localStorage.getItem("lastPushEndpoint");
+      // Coba ambil dari localStorage
+      const stored = localStorage.getItem("pushSubscription");
+      if (stored) {
+        const storedJSON = JSON.parse(stored);
+        endpoint = storedJSON.endpoint;
+      }
     }
 
     if (!endpoint) {
@@ -287,18 +332,10 @@ class PushManager {
       );
 
       if (!response.ok) {
-        // Jangan throw error untuk status 404 (endpoint sudah dihapus)
         if (response.status === 404) {
           console.log("PushManager: Subscription already removed from server");
           return { success: true };
         }
-
-        const errorText = await response.text();
-        console.warn(
-          "PushManager: Server unsubscription failed:",
-          response.status,
-          errorText
-        );
         return { success: false, error: `Server returned ${response.status}` };
       }
 
@@ -319,16 +356,13 @@ class PushManager {
         new Notification(title, {
           body: body,
           icon: "/icons/icon-192x192.png",
-          badge: "/icons/icon-72x72.png",
         });
       } catch (error) {
-        console.log(
-          "PushManager: Could not show notification, using alert:",
-          error
-        );
+        // Fallback ke alert
         alert(`${title}: ${body}`);
       }
     } else {
+      // Fallback ke alert
       alert(`${title}: ${body}`);
     }
   }
@@ -338,7 +372,6 @@ class PushManager {
     const base64 = (base64String + padding)
       .replace(/\-/g, "+")
       .replace(/_/g, "/");
-
     const rawData = window.atob(base64);
     const outputArray = new Uint8Array(rawData.length);
 
@@ -349,51 +382,16 @@ class PushManager {
   }
 
   getStatus() {
+    // Selalu cek status terbaru dari localStorage
+    const stored = localStorage.getItem("pushSubscription");
+    this.isSubscribed = !!stored;
+
     return {
       isSubscribed: this.isSubscribed,
       isSupported: this._isSupported(),
       permission: Notification.permission,
       isInitialized: this._isInitialized,
-      subscription: this.subscription ? this.subscription.toJSON() : null,
-      storedEndpoint: localStorage.getItem("lastPushEndpoint"),
     };
-  }
-
-  // Method untuk debug
-  async debugSubscription() {
-    const status = this.getStatus();
-    console.log("PushManager Debug Info:", status);
-
-    if (this.subscription) {
-      console.log("Subscription Details:", this.subscription.toJSON());
-    }
-
-    return status;
-  }
-
-  // Method untuk force cleanup (jika ada masalah)
-  async forceCleanup() {
-    console.log("PushManager: Force cleanup initiated");
-
-    // Unsubscribe jika ada subscription aktif
-    if (this.subscription) {
-      try {
-        await this.subscription.unsubscribe();
-      } catch (error) {
-        console.warn("PushManager: Force cleanup - unsubscribe failed:", error);
-      }
-    }
-
-    // Reset semua state
-    this.subscription = null;
-    this.isSubscribed = false;
-    localStorage.removeItem("lastPushEndpoint");
-
-    // Coba hapus dari server
-    await this._removeSubscriptionFromServer();
-
-    console.log("PushManager: Force cleanup completed");
-    return true;
   }
 }
 

@@ -1,7 +1,7 @@
 class IDBManager {
   constructor() {
     this.dbName = "CeritaDatabase";
-    this.version = 6; // ✅ INCREASE VERSION NUMBER
+    this.version = 9; // ✅ INCREASE VERSION NUMBER
     this.db = null;
     this._isOpening = false;
     this._openPromise = null;
@@ -73,13 +73,18 @@ class IDBManager {
           favoriteStore.createIndex("addedAt", "addedAt", { unique: false });
         }
 
-        // Tambahkan migration untuk versi selanjutnya jika needed
-        // if (oldVersion < 2) { ... }
+        // Pastikan index untuk synced ada
+        if (oldVersion < 9) {
+          const transaction = event.target.transaction;
+          const offlineStore = transaction.objectStore("offlineStories");
+          if (!offlineStore.indexNames.contains("synced")) {
+            offlineStore.createIndex("synced", "synced", { unique: false });
+          }
+        }
       };
 
       request.onblocked = () => {
         console.log("⚠️ Database upgrade blocked - close other tabs");
-        // Force close other connections
         if (this.db) {
           this.db.close();
         }
@@ -212,7 +217,7 @@ class IDBManager {
         const store = transaction.objectStore("offlineStories");
         const request = store.getAll();
 
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => resolve(request.result || []);
         request.onerror = () => reject(request.error);
       });
     } catch (error) {
@@ -257,19 +262,132 @@ class IDBManager {
         getRequest.onsuccess = () => {
           const story = getRequest.result;
           if (story) {
+            // Pastikan storyId bertipe number
+            const numericStoryId =
+              typeof storyId === "string" ? parseInt(storyId) : storyId;
+
             story.synced = true;
+            story.id = numericStoryId; // Pastikan ID konsisten
+
             const putRequest = store.put(story);
-            putRequest.onsuccess = () => resolve();
-            putRequest.onerror = () => reject(putRequest.error);
+            putRequest.onsuccess = () => {
+              console.log(`Story ${storyId} marked as synced`);
+              resolve();
+            };
+            putRequest.onerror = (error) => {
+              console.error(`Error marking story ${storyId} as synced:`, error);
+              reject(error);
+            };
           } else {
-            resolve();
+            console.warn(`Story ${storyId} not found for marking as synced`);
+            resolve(); // Still resolve jika story tidak ditemukan
           }
         };
-        getRequest.onerror = () => reject(getRequest.error);
+
+        getRequest.onerror = (error) => {
+          console.error(`Error getting story ${storyId}:`, error);
+          reject(error);
+        };
       });
     } catch (error) {
       console.error("Error marking story as synced:", error);
       throw error;
+    }
+  }
+
+  // PERBAIKAN: Method getUnsyncedStories yang aman
+  async getUnsyncedStories() {
+    try {
+      await this._ensureDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction(["offlineStories"], "readonly");
+        const store = transaction.objectStore("offlineStories");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          try {
+            const allStories = request.result || [];
+            console.log("Total offline stories:", allStories.length);
+
+            // Filter stories yang belum sync
+            const unsyncedStories = allStories.filter((story) => {
+              return story.synced === false || story.synced === undefined;
+            });
+
+            console.log("Unsynced stories:", unsyncedStories.length);
+            resolve(unsyncedStories);
+          } catch (filterError) {
+            console.error("Error filtering stories:", filterError);
+            resolve([]);
+          }
+        };
+
+        request.onerror = (error) => {
+          console.error("Error getting offline stories:", error);
+          reject(error);
+        };
+      });
+    } catch (error) {
+      console.error("Error in getUnsyncedStories:", error);
+      return [];
+    }
+  }
+
+  // PERBAIKAN: Method syncOfflineStories yang robust
+  async syncOfflineStories() {
+    try {
+      console.log("Starting offline stories sync...");
+      const unsyncedStories = await this.getUnsyncedStories();
+
+      console.log(`Found ${unsyncedStories.length} stories to sync`);
+
+      const syncResults = {
+        successful: [],
+        failed: [],
+      };
+
+      // Jika tidak ada yang perlu sync, return langsung
+      if (unsyncedStories.length === 0) {
+        console.log("No stories to sync");
+        return syncResults;
+      }
+
+      // Process each story
+      for (const story of unsyncedStories) {
+        try {
+          console.log(`Syncing story ${story.id}...`);
+
+          // Simulasi API call
+          await new Promise((resolve, reject) => {
+            setTimeout(() => {
+              // 80% success rate untuk simulasi
+              if (Math.random() > 0.2) {
+                resolve({ success: true, id: story.id });
+              } else {
+                reject(new Error("Sync simulation failed"));
+              }
+            }, 500);
+          });
+
+          // Mark as synced jika berhasil
+          await this.markOfflineStoryAsSynced(story.id);
+          syncResults.successful.push(story.id);
+          console.log(`Story ${story.id} synced successfully`);
+        } catch (error) {
+          console.error(`Failed to sync story ${story.id}:`, error);
+          syncResults.failed.push({
+            id: story.id,
+            error: error.message,
+          });
+        }
+      }
+
+      console.log("Sync completed:", syncResults);
+      return syncResults;
+    } catch (error) {
+      console.error("Error in syncOfflineStories:", error);
+      return { successful: [], failed: [] };
     }
   }
 
@@ -353,13 +471,14 @@ class IDBManager {
     }
   }
 
-  // Search dengan relevancy scoring
+  // PERBAIKAN: Search dengan hasil terurut
   async searchStories(query) {
     try {
       console.log("🔍 IDBManager: Searching for:", query);
 
       if (!query || query.trim() === "") {
         const allStories = await this.getStories();
+        // Urutkan dari terbaru ke terlama
         return allStories.sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         );
@@ -370,53 +489,21 @@ class IDBManager {
 
       console.log("🔍 IDBManager: Total stories to search:", stories.length);
 
-      // Relevancy scoring
-      const storiesWithRelevancy = stories.map((story) => {
-        let score = 0;
+      // Filter stories berdasarkan pencarian
+      const filteredStories = stories.filter((story) => {
         const storyName = story.name?.toLowerCase() || "";
         const storyDesc = story.description?.toLowerCase() || "";
 
-        // Exact matches - highest score
-        if (storyName === searchTerm) score += 100;
-        if (storyDesc === searchTerm) score += 80;
-
-        // Starts with - medium score
-        if (storyName.startsWith(searchTerm)) score += 60;
-        if (storyDesc.startsWith(searchTerm)) score += 40;
-
-        // Contains - lower score
-        if (storyName.includes(searchTerm)) score += 30;
-        if (storyDesc.includes(searchTerm)) score += 20;
-
-        // Word boundary matches
-        const nameWords = storyName.split(/\s+/);
-        const descWords = storyDesc.split(/\s+/);
-
-        nameWords.forEach((word) => {
-          if (word === searchTerm) score += 25;
-          if (word.startsWith(searchTerm)) score += 15;
-        });
-
-        descWords.forEach((word) => {
-          if (word === searchTerm) score += 15;
-          if (word.startsWith(searchTerm)) score += 10;
-        });
-
-        return {
-          ...story,
-          _relevancyScore: score,
-        };
+        return storyName.includes(searchTerm) || storyDesc.includes(searchTerm);
       });
 
-      // Filter dan sort by relevancy
-      const relevantStories = storiesWithRelevancy
-        .filter((story) => story._relevancyScore > 0)
-        .sort((a, b) => b._relevancyScore - a._relevancyScore);
+      // Urutkan hasil pencarian dari terbaru ke terlama
+      const sortedResults = filteredStories.sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
 
-      console.log("🔍 IDBManager: Search results:", relevantStories.length);
-
-      // Hapus scoring property sebelum return
-      return relevantStories.map(({ _relevancyScore, ...story }) => story);
+      console.log("🔍 IDBManager: Search results:", sortedResults.length);
+      return sortedResults;
     } catch (error) {
       console.error("❌ IDBManager: Search error:", error);
       return [];
@@ -511,30 +598,7 @@ class IDBManager {
     }
   }
 
-  // Utility methods
-  async clearDatabase() {
-    try {
-      await this._ensureDB();
-
-      return new Promise((resolve, reject) => {
-        const transaction = this.db.transaction(
-          ["stories", "offlineStories", "favorites"],
-          "readwrite"
-        );
-
-        transaction.objectStore("stories").clear();
-        transaction.objectStore("offlineStories").clear();
-        transaction.objectStore("favorites").clear();
-
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-      });
-    } catch (error) {
-      console.error("Error clearing database:", error);
-      throw error;
-    }
-  }
-
+  // Method untuk mendapatkan stats
   async getStats() {
     try {
       const stories = await this.getStories();
@@ -579,51 +643,6 @@ class IDBManager {
     }
   }
 
-  // Offline sync functionality
-  async syncOfflineStories() {
-    try {
-      const offlineStories = await this.getOfflineStories();
-      const unsyncedStories = offlineStories.filter((story) => !story.synced);
-
-      const syncResults = {
-        successful: [],
-        failed: [],
-      };
-
-      for (const story of unsyncedStories) {
-        try {
-          // Simulate API sync
-          await this._syncStoryToAPI(story);
-          await this.markOfflineStoryAsSynced(story.id);
-          syncResults.successful.push(story.id);
-        } catch (error) {
-          syncResults.failed.push({
-            id: story.id,
-            error: error.message,
-          });
-        }
-      }
-
-      return syncResults;
-    } catch (error) {
-      console.error("Error syncing offline stories:", error);
-      return { successful: [], failed: [] };
-    }
-  }
-
-  async _syncStoryToAPI(story) {
-    // Simulasi API call
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (Math.random() > 0.2) {
-          resolve({ success: true, id: story.id });
-        } else {
-          reject(new Error("Sync failed"));
-        }
-      }, 1000);
-    });
-  }
-
   // Pagination support
   async getStoriesPaginated(page = 1, pageSize = 10) {
     try {
@@ -647,6 +666,29 @@ class IDBManager {
         pageSize: 10,
         totalPages: 0,
       };
+    }
+  }
+
+  async clearDatabase() {
+    try {
+      await this._ensureDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction(
+          ["stories", "offlineStories", "favorites"],
+          "readwrite"
+        );
+
+        transaction.objectStore("stories").clear();
+        transaction.objectStore("offlineStories").clear();
+        transaction.objectStore("favorites").clear();
+
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } catch (error) {
+      console.error("Error clearing database:", error);
+      throw error;
     }
   }
 }

@@ -1,17 +1,7 @@
 import { getActiveRoute } from "../routes/url-parser.js";
 import { navigation } from "../components/navigation.js";
 import { authService } from "../utils/auth.js";
-
-// Import routes sebagai function loader
-const routes = {
-  "/beranda": () => import("../pages/home/home-page.js"),
-  "/about": () => import("../pages/about/about-page.js"),
-  "/add": () => import("../pages/add/add-page.js"),
-  "/login": () => import("../pages/auth/login-page.js"),
-  "/register": () => import("../pages/auth/register-page.js"),
-  "/favorites": () => import("../pages/favorites/favorites-page.js"),
-  "/offline": () => import("../pages/offline/offline-page.js"),
-};
+import { routes } from "../routes/routes.js";
 
 class App {
   _content = null;
@@ -22,7 +12,7 @@ class App {
   _previousRoute = null;
   _currentRoute = null;
 
-  // Definisikan urutan halaman untuk menentukan arah
+  // Definisikan urutan halaman untuk menentukan arah transisi
   _pageOrder = {
     "/beranda": 1,
     "/about": 2,
@@ -53,7 +43,6 @@ class App {
   }
 
   _initRouter() {
-    // Debounce untuk prevent multiple calls
     const debounce = (func, wait) => {
       let timeout;
       return function executedFunction(...args) {
@@ -127,16 +116,8 @@ class App {
     if (skipLink && mainContent) {
       skipLink.addEventListener("click", (e) => {
         e.preventDefault();
-
         mainContent.focus();
         mainContent.scrollIntoView({ behavior: "smooth" });
-
-        mainContent.style.outline = "2px dashed lightskyblue";
-        mainContent.style.outlineOffset = "2px";
-
-        setTimeout(() => {
-          mainContent.style.outline = "none";
-        }, 3000);
       });
     }
   }
@@ -147,7 +128,6 @@ class App {
       return;
     }
 
-    // Prevent double execution
     if (this._isRendering) {
       console.log("App: Already rendering, skipping...");
       return;
@@ -172,7 +152,6 @@ class App {
       if (!authService.isLoggedIn()) {
         const protectedRoutes = ["/beranda", "/add", "/favorites", "/offline"];
         if (protectedRoutes.includes(url)) {
-          console.log("Redirecting to about page - user not logged in");
           url = "#/about";
           window.location.hash = url;
           this._isRendering = false;
@@ -183,7 +162,6 @@ class App {
       if (authService.isLoggedIn()) {
         const authRoutes = ["/login", "/register"];
         if (authRoutes.includes(url)) {
-          console.log("Redirecting to home page - user already logged in");
           url = "#/beranda";
           window.location.hash = url;
           this._isRendering = false;
@@ -208,22 +186,34 @@ class App {
         `🔄 Navigation: ${this._previousRoute} → ${url} (${direction})`
       );
 
-      // Use View Transitions API if supported
+      // Gunakan View Transitions API jika tersedia
       if (document.startViewTransition) {
-        console.log(`🎬 Using ${direction} View Transition`);
+        console.log(`🎬 Using View Transition with direction: ${direction}`);
 
-        const transition = document.startViewTransition(() => {
-          return this._performPageRender(pageLoader, url, direction);
+        // Set class untuk direction sebelum transisi
+        this._content.classList.remove(
+          "forward-transition",
+          "backward-transition",
+          "none-transition"
+        );
+        this._content.classList.add(`${direction}-transition`);
+
+        const transition = document.startViewTransition(async () => {
+          await this._renderPageContent(pageLoader, url, direction);
         });
 
         await transition.finished;
+
+        // Hapus class setelah transisi selesai
+        setTimeout(() => {
+          this._content.classList.remove(`${direction}-transition`);
+        }, 400);
       } else {
-        // Fallback for browsers that don't support View Transitions
+        // Fallback tanpa View Transitions
         console.log("⚠️ View Transitions not supported, using fallback");
-        await this._performPageRender(pageLoader, url, direction);
+        await this._renderPageContent(pageLoader, url, direction);
       }
 
-      // Update route history
       this._previousRoute = this._currentRoute;
       this._currentRoute = url;
     } catch (error) {
@@ -237,89 +227,54 @@ class App {
     }
   }
 
-  // Method untuk menentukan arah transisi berdasarkan urutan halaman
+  async _renderPageContent(pageLoader, url, direction) {
+    // Cleanup previous page
+    if (this._currentPage && typeof this._currentPage.cleanup === "function") {
+      await this._currentPage.cleanup();
+    }
+
+    // Add loading state
+    this._content.style.opacity = "0.7";
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Dynamic import
+    const pageModule = await pageLoader();
+    const page = pageModule.default;
+
+    this._content.innerHTML = await page.render();
+    this._currentPage = page;
+
+    if (typeof page.afterRender === "function") {
+      try {
+        await page.afterRender();
+      } catch (afterRenderError) {
+        console.error("Error in afterRender:", afterRenderError);
+      }
+    }
+
+    // Selesaikan transisi
+    this._content.style.opacity = "1";
+    this._updateDocumentTitle(url);
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Method untuk menentukan arah transisi
   _getTransitionDirection(newRoute) {
-    if (!this._currentRoute) return "none"; // First load
+    if (!this._currentRoute) return "none";
 
     const currentOrder = this._pageOrder[this._currentRoute] || 0;
     const newOrder = this._pageOrder[newRoute] || 0;
 
     if (newOrder > currentOrder) {
-      return "forward"; // Kanan ke kiri (seperti next)
+      return "forward";
     } else if (newOrder < currentOrder) {
-      return "backward"; // Kiri ke kanan (seperti back)
+      return "backward";
     } else {
-      return "none"; // Same page
+      return "none";
     }
   }
-
-  async _performPageRender(pageLoader, url, direction) {
-    try {
-      // Cleanup previous page
-      if (
-        this._currentPage &&
-        typeof this._currentPage.cleanup === "function"
-      ) {
-        await this._currentPage.cleanup();
-      }
-
-      // Apply directional view transition
-      this._applyDirectionalTransition(direction);
-
-      // Add loading state
-      this._content.style.opacity = "0";
-      this._content.style.transition = "opacity 0.3s ease";
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Dynamic import
-      const pageModule = await pageLoader();
-      const page = pageModule.default;
-
-      this._content.innerHTML = await page.render();
-      this._currentPage = page;
-
-      if (typeof page.afterRender === "function") {
-        try {
-          await page.afterRender();
-        } catch (afterRenderError) {
-          console.error("Error in afterRender:", afterRenderError);
-        }
-      }
-
-      this._content.style.opacity = "1";
-      this._updateDocumentTitle(url);
-
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (error) {
-      console.error("Error in page render:", error);
-      throw error;
-    }
-  }
-
-  _applyDirectionalTransition(direction) {
-    // Hapus class transisi sebelumnya
-    this._content.classList.remove(
-      "transition-forward",
-      "transition-backward",
-      "transition-none"
-    );
-
-    // Tambah class berdasarkan arah
-    if (direction === "forward") {
-      this._content.classList.add("transition-forward");
-    } else if (direction === "backward") {
-      this._content.classList.add("transition-backward");
-    } else {
-      this._content.classList.add("transition-none");
-    }
-
-    // Set view transition name berdasarkan arah
-    if (this._content) {
-      this._content.style.viewTransitionName = `page-${direction}`;
-    }
-  }
-
   _showErrorPage(title, message) {
     this._content.innerHTML = `
       <section class="error-page" style="text-align: center; padding: 60px 20px;">

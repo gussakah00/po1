@@ -19,11 +19,19 @@ export async function fetchStoriesWithToken() {
   }
 
   try {
+    console.log("🔍 DEBUG - Fetching stories from API...");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
     const response = await fetch(`${API_BASE}/stories`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -38,21 +46,40 @@ export async function fetchStoriesWithToken() {
       return [];
     }
 
-    const storiesWithCorrectName = json.listStory.map((story) => {
+    // Perbaiki URL foto jika diperlukan
+    const storiesWithCorrectedPhotos = json.listStory.map((story) => {
+      let correctedPhotoUrl = story.photoUrl;
+
+      // Jika URL foto tidak valid, gunakan placeholder
+      if (!story.photoUrl || !story.photoUrl.startsWith("http")) {
+        correctedPhotoUrl =
+          "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkdhbWJhciB0aWRhayB0ZXJzZWRpYTwvdGV4dD48L3N2Zz4=";
+      }
+
       return {
         id: story.id,
         name: story.name,
         description: story.description,
-        photoUrl: story.photoUrl,
+        photoUrl: correctedPhotoUrl,
         lat: story.lat,
         lon: story.lon,
         createdAt: story.createdAt,
       };
     });
 
-    return storiesWithCorrectName;
+    return storiesWithCorrectedPhotos;
   } catch (error) {
-    console.error("Error fetching stories:", error);
+    console.error("❌ Error fetching stories:", error);
+
+    if (error.name === "AbortError") {
+      console.error("Request timeout - API server mungkin lambat");
+    } else if (
+      error.name === "TypeError" &&
+      error.message.includes("Failed to fetch")
+    ) {
+      console.error("Network error - Tidak bisa connect ke API server");
+    }
+
     return [];
   }
 }
@@ -76,14 +103,19 @@ export async function postStory({ description, photo, lat, lon }) {
   try {
     console.log("🔍 DEBUG - Mulai mengirim cerita ke API...");
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
     const response = await fetch(`${API_BASE}/stories`, {
       method: "POST",
       body: formData,
       headers: {
         Authorization: `Bearer ${token}`,
-        // JANGAN tambahkan Content-Type untuk FormData, browser akan set otomatis dengan boundary
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     console.log("🔍 DEBUG - Response status:", response.status);
 
@@ -103,7 +135,13 @@ export async function postStory({ description, photo, lat, lon }) {
   } catch (error) {
     console.error("🔍 DEBUG - Error detail:", error);
 
-    // Berikan pesan error yang lebih spesifik
+    if (error.name === "AbortError") {
+      return {
+        error: true,
+        message: "Request timeout - Server terlalu lama merespon.",
+      };
+    }
+
     if (
       error.name === "TypeError" &&
       error.message.includes("Failed to fetch")
@@ -123,13 +161,19 @@ export async function postStory({ description, photo, lat, lon }) {
 
 export async function loginUser({ email, password }) {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(`${API_BASE}/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ email, password }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const data = await response.json();
 
@@ -145,6 +189,13 @@ export async function loginUser({ email, password }) {
       data: data,
     };
   } catch (error) {
+    if (error.name === "AbortError") {
+      return {
+        error: true,
+        message: "Request timeout - Server terlalu lama merespon.",
+      };
+    }
+
     return {
       error: true,
       message: "Terjadi kesalahan jaringan",
@@ -154,13 +205,19 @@ export async function loginUser({ email, password }) {
 
 export async function registerUser({ name, email, password }) {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(`${API_BASE}/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ name, email, password }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const data = await response.json();
 
@@ -176,6 +233,13 @@ export async function registerUser({ name, email, password }) {
       data: data,
     };
   } catch (error) {
+    if (error.name === "AbortError") {
+      return {
+        error: true,
+        message: "Request timeout - Server terlalu lama merespon.",
+      };
+    }
+
     return {
       error: true,
       message: "Terjadi kesalahan jaringan",

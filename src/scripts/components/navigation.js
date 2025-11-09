@@ -6,21 +6,26 @@ class Navigation {
     this.navElement = null;
     this.updateNavigation = this.updateNavigation.bind(this);
     this._isPushManagerInitialized = false;
+    this._isInitialized = false;
   }
 
   async init() {
+    if (this._isInitialized) {
+      console.log("Navigation: Already initialized, skipping...");
+      return;
+    }
+
     this.navElement = document.getElementById("nav-list");
     this.updateNavigation();
 
     window.addEventListener("authchange", this.updateNavigation);
 
-    // Initialize push manager jika user sudah login
     if (authService.isLoggedIn()) {
       console.log("Navigation: Initializing push manager...");
-
-      // Init push manager tanpa blocking
-      this._initializePushManager();
+      await this._initializePushManager();
     }
+
+    this._isInitialized = true;
   }
 
   async _initializePushManager() {
@@ -29,7 +34,6 @@ class Navigation {
       this._isPushManagerInitialized = true;
       console.log("Navigation: Push manager initialized successfully");
 
-      // Update UI setelah init selesai
       this._updateNotificationUI();
     } catch (error) {
       console.error("Navigation: Failed to initialize push manager:", error);
@@ -69,10 +73,8 @@ class Navigation {
         logoutBtn.addEventListener("click", this.handleLogout.bind(this));
       }
 
-      // Setup notification controls dengan delay untuk pastikan push manager ready
-      setTimeout(() => {
-        this._setupNotificationControls();
-      }, 1000);
+      // Setup notification controls
+      this._setupNotificationControls();
     } else {
       this.navElement.innerHTML = `
         <li><a href="#/about" class="nav-link">About</a></li>
@@ -89,6 +91,7 @@ class Navigation {
     const disableBtn = document.getElementById("disable-notifications");
 
     if (enableBtn && disableBtn) {
+      // Update UI berdasarkan status terkini
       this._updateNotificationUI();
 
       enableBtn.addEventListener("click", async () => {
@@ -145,16 +148,16 @@ class Navigation {
     const messageElement = document.createElement("div");
     messageElement.textContent = message;
     messageElement.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    background: ${type === "success" ? "#4CAF50" : "#f44336"};
-    color: white;
-    border-radius: 4px;
-    z-index: 10000;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  `;
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: ${type === "success" ? "#4CAF50" : "#f44336"};
+      color: white;
+      border-radius: 4px;
+      z-index: 10000;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    `;
 
     document.body.appendChild(messageElement);
     setTimeout(() => {
@@ -170,8 +173,11 @@ class Navigation {
 
     if (!enableBtn || !disableBtn) return;
 
+    // Dapatkan status terkini
     const status = pushManager.getStatus();
+    console.log("Navigation: Current notification status:", status);
 
+    // Update UI berdasarkan status
     if (status.isSubscribed) {
       enableBtn.style.display = "none";
       disableBtn.style.display = "inline-block";
@@ -184,6 +190,26 @@ class Navigation {
     if (!status.isSupported) {
       enableBtn.style.display = "none";
       disableBtn.style.display = "none";
+
+      // Tambahkan pesan bahwa notifikasi tidak didukung
+      const notificationControls = document.querySelector(
+        ".notification-controls"
+      );
+      if (
+        notificationControls &&
+        !notificationControls.querySelector(".unsupported-message")
+      ) {
+        const unsupportedMsg = document.createElement("div");
+        unsupportedMsg.className = "unsupported-message";
+        unsupportedMsg.textContent = "Notifikasi tidak didukung di browser ini";
+        unsupportedMsg.style.cssText = `
+          font-size: 12px;
+          color: #666;
+          margin-top: 5px;
+          text-align: center;
+        `;
+        notificationControls.appendChild(unsupportedMsg);
+      }
     }
   }
 

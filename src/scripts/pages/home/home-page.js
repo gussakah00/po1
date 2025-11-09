@@ -87,7 +87,7 @@ const HomePage = {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     await this._initializeMap();
-    await this._loadStories(); // Pastikan method ini ada
+    await this._loadStories();
     this._setupControls();
     this._checkOfflineStories();
 
@@ -185,40 +185,7 @@ const HomePage = {
       }
       throw error;
     }
-    const baseLayers = {
-      OpenStreetMap: L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          maxZoom: 18,
-        }
-      ),
-      Satellite: L.tileLayer(
-        "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-        {
-          attribution: "&copy; Google Satellite",
-          maxZoom: 20,
-          subdomains: ["mt0", "mt1", "mt2", "mt3"],
-        }
-      ),
-      "Dark Mode": L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        {
-          attribution: "&copy; CartoDB",
-          maxZoom: 18,
-        }
-      ),
-    };
-
-    // Add default layer
-    baseLayers["OpenStreetMap"].addTo(this._map);
-
-    // Add layer control
-    L.control.layers(baseLayers).addTo(this._map);
   },
-
-  // PASTIKAN SEMUA METHOD ADA DI BAWAH INI:
 
   async _loadStories() {
     console.log("HomePage: Loading stories...");
@@ -229,10 +196,13 @@ const HomePage = {
       let stories = await fetchStoriesWithToken();
 
       if (stories && stories.length > 0) {
+        console.log(
+          `✅ Successfully loaded ${stories.length} stories from API`
+        );
         await idbManager.saveStories(stories);
         this._stories = stories;
       } else {
-        console.log("Loading from IndexedDB...");
+        console.log("⚠️ No stories from API, loading from IndexedDB...");
         this._stories = await idbManager.getStories();
       }
 
@@ -241,9 +211,10 @@ const HomePage = {
       this._displayStories();
       this._updateStats();
     } catch (error) {
-      console.error("Error loading stories:", error);
+      console.error("❌ Error loading stories:", error);
 
       try {
+        // Fallback ke data offline
         this._stories = await idbManager.getStories();
         this._displayStories();
         this._updateStats();
@@ -251,13 +222,16 @@ const HomePage = {
         if (loadingMessage) loadingMessage.remove();
 
         container.innerHTML += `
-          <div class="offline-warning">
-            <p>⚠️ Anda sedang offline. Menampilkan data yang tersimpan.</p>
-          </div>
-        `;
+        <div class="offline-warning" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+          <p style="margin: 0; color: #856404;">
+            ⚠️ <strong>Anda sedang offline atau server tidak tersedia.</strong><br>
+            Menampilkan data yang tersimpan secara offline.
+          </p>
+        </div>
+      `;
       } catch (idbError) {
-        console.error("Error loading from IndexedDB:", idbError);
-        this._showError("Gagal memuat cerita.");
+        console.error("❌ Error loading from IndexedDB:", idbError);
+        this._showError("Gagal memuat cerita. Periksa koneksi internet Anda.");
       }
     }
   },
@@ -474,48 +448,179 @@ const HomePage = {
 
   async _syncOfflineData() {
     try {
+      console.log("🔄 Starting offline data sync...");
+
+      const syncButton = document.getElementById("sync-offline-data");
+      if (syncButton) {
+        syncButton.disabled = true;
+        syncButton.textContent = "Menyinkronisasi...";
+      }
+
+      // Test dengan logging
+      console.log("📊 Getting unsynced stories...");
       const unsyncedStories = await idbManager.getUnsyncedStories();
+      console.log("📊 Unsynced stories result:", unsyncedStories);
 
       if (unsyncedStories.length === 0) {
+        console.log("ℹ️ No stories to sync");
         alert("Tidak ada data offline yang perlu disinkronisasi.");
+        if (syncButton) {
+          syncButton.disabled = false;
+          syncButton.textContent = "🔄 Sync";
+        }
         return;
       }
 
-      alert(
-        `Berhasil menyinkronisasi ${unsyncedStories.length} cerita offline.`
-      );
-      this._checkOfflineStories();
+      console.log(`🔄 Found ${unsyncedStories.length} stories to sync`);
+
+      const syncResults = await idbManager.syncOfflineStories();
+      console.log("🔄 Sync results:", syncResults);
+
+      if (syncButton) {
+        syncButton.disabled = false;
+        syncButton.textContent = "🔄 Sync";
+      }
+
+      if (syncResults.successful.length > 0) {
+        alert(
+          `Berhasil menyinkronisasi ${syncResults.successful.length} cerita offline.`
+        );
+        this._loadStories();
+        this._checkOfflineStories();
+      } else if (syncResults.failed.length > 0) {
+        alert(
+          `Gagal menyinkronisasi ${syncResults.failed.length} cerita. Silakan coba lagi.`
+        );
+      } else {
+        alert("Tidak ada cerita yang perlu disinkronisasi.");
+      }
     } catch (error) {
-      console.error("Error syncing offline data:", error);
-      alert("Gagal menyinkronisasi data offline.");
+      console.error("❌ Error syncing offline data:", error);
+
+      const syncButton = document.getElementById("sync-offline-data");
+      if (syncButton) {
+        syncButton.disabled = false;
+        syncButton.textContent = "🔄 Sync";
+      }
+
+      alert("Gagal menyinkronisasi data offline: " + error.message);
     }
   },
 
   async _checkOfflineStories() {
-    const offlineStories = await idbManager.getOfflineStories();
-    const unsyncedStories = offlineStories.filter((story) => !story.synced);
+    try {
+      const offlineStories = await idbManager.getOfflineStories();
+      const unsyncedStories = offlineStories.filter((story) => !story.synced);
 
-    if (unsyncedStories.length > 0) {
       const offlineSection = document.getElementById("offline-stories-section");
       const offlineList = document.getElementById("offline-stories-list");
 
       if (offlineSection && offlineList) {
-        offlineSection.style.display = "block";
-        offlineList.innerHTML = unsyncedStories
-          .map(
-            (story) => `
-          <div class="offline-story-item">
-            <p><strong>${story.description.substring(0, 50)}...</strong></p>
-            <small>Dibuat: ${new Date(story.createdAt).toLocaleDateString(
-              "id-ID"
-            )}</small>
-            <button class="sync-single-btn" data-story-id="${story.id}">
-              Sinkronisasi
-            </button>
-          </div>
-        `
-          )
-          .join("");
+        if (unsyncedStories.length > 0) {
+          offlineSection.style.display = "block";
+          offlineList.innerHTML = unsyncedStories
+            .map(
+              (story) => `
+              <div class="offline-story-item">
+                <div class="offline-story-content">
+                  <h4>${story.name || "Cerita Tanpa Judul"}</h4>
+                  <p class="offline-story-desc">${story.description.substring(
+                    0,
+                    50
+                  )}...</p>
+                  <div class="offline-story-meta">
+                    <small>Dibuat: ${new Date(
+                      story.createdAt
+                    ).toLocaleDateString("id-ID")}</small>
+                    <small>Status: ${
+                      story.synced ? "Tersinkronisasi" : "Belum Sync"
+                    }</small>
+                  </div>
+                </div>
+                <div class="offline-story-actions">
+                  ${
+                    !story.synced
+                      ? `
+                    <button class="sync-single-btn" data-story-id="${story.id}">
+                      Sinkronisasi
+                    </button>
+                  `
+                      : ""
+                  }
+                  <button class="delete-offline-btn" data-story-id="${
+                    story.id
+                  }">
+                    Hapus
+                  </button>
+                </div>
+              </div>
+            `
+            )
+            .join("");
+          document.querySelectorAll(".sync-single-btn").forEach((btn) => {
+            btn.addEventListener("click", async (e) => {
+              const storyId = parseInt(e.target.dataset.storyId);
+              await this._syncSingleStory(storyId);
+            });
+          });
+
+          document.querySelectorAll(".delete-offline-btn").forEach((btn) => {
+            btn.addEventListener("click", async (e) => {
+              const storyId = parseInt(e.target.dataset.storyId);
+              if (confirm("Apakah Anda yakin ingin menghapus cerita ini?")) {
+                await idbManager.deleteOfflineStory(storyId);
+                this._checkOfflineStories();
+              }
+            });
+          });
+        } else {
+          offlineSection.style.display = "none";
+        }
+      }
+    } catch (error) {
+      console.error("Error checking offline stories:", error);
+    }
+  },
+
+  async _syncSingleStory(storyId) {
+    try {
+      const offlineStories = await idbManager.getOfflineStories();
+      const story = offlineStories.find((s) => s.id === storyId);
+
+      if (!story) {
+        alert("Cerita tidak ditemukan.");
+        return;
+      }
+
+      const button = document.querySelector(
+        `.sync-single-btn[data-story-id="${storyId}"]`
+      );
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Menyinkronisasi...";
+      }
+
+      // Simulasi sync
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await idbManager.markOfflineStoryAsSynced(storyId);
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Sinkronisasi";
+      }
+
+      alert("Cerita berhasil disinkronisasi!");
+      this._checkOfflineStories();
+    } catch (error) {
+      console.error("Error syncing single story:", error);
+      alert("Gagal menyinkronisasi cerita: " + error.message);
+
+      const button = document.querySelector(
+        `.sync-single-btn[data-story-id="${storyId}"]`
+      );
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Sinkronisasi";
       }
     }
   },

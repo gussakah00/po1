@@ -3,13 +3,20 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 module.exports = {
-  entry: {
-    app: "./src/scripts/index.js",
-  },
+  entry: "./src/scripts/index.js",
   output: {
-    filename: "[name].bundle.js",
     path: path.resolve(__dirname, "dist"),
+    filename: "main.bundle.js",
     clean: true,
+    publicPath: "/po1/",
+  },
+  module: {
+    rules: [
+      {
+        test: /\.(png|svg|jpg|jpeg|gif)$/i,
+        type: "asset/resource",
+      },
+    ],
   },
   plugins: [
     new HtmlWebpackPlugin({
@@ -19,47 +26,23 @@ module.exports = {
     new CopyWebpackPlugin({
       patterns: [
         {
-          from: "src/public",
-          to: "",
+          from: "./src/public",
+          to: ".",
           noErrorOnMissing: true,
         },
         {
-          from: "sw.js",
-          to: "sw.js",
-          noErrorOnMissing: true,
+          from: "./src/styles/styles.css", // CSS dari src/styles
+          to: "styles.css",
         },
         {
-          from: "app.webmanifest",
-          to: "app.webmanifest",
-          noErrorOnMissing: true,
+          from: "./app.webmanifest",
+          to: ".",
         },
         {
-          from: "node_modules/leaflet/dist/images",
-          to: "leaflet-images",
-          noErrorOnMissing: true,
+          from: "./sw.js",
+          to: ".",
         },
       ],
     }),
   ],
-  module: {
-    rules: [
-      {
-        test: /\.(png|svg|jpg|jpeg|gif)$/i,
-        type: "asset/resource",
-        generator: {
-          filename: "images/[name][ext]",
-        },
-      },
-      {
-        test: /\.(woff|woff2|eot|ttf|otf)$/i,
-        type: "asset/resource",
-        generator: {
-          filename: "fonts/[name][ext]",
-        },
-      },
-    ],
-  },
-  resolve: {
-    extensions: [".js"],
-  },
 };
