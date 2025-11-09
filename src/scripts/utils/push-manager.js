@@ -66,7 +66,7 @@ class PushManager {
 
       // Unsubscribe existing subscription first
       if (this.subscription) {
-        await this.subscription.unsubscribe();
+        await this.unsubscribe();
       }
 
       this.subscription = await this.registration.pushManager.subscribe({
@@ -77,6 +77,13 @@ class PushManager {
       });
 
       this.isSubscribed = true;
+
+      // Simpan endpoint ke localStorage untuk backup
+      const subscriptionJSON = this.subscription.toJSON();
+      localStorage.setItem("lastPushEndpoint", subscriptionJSON.endpoint);
+      console.log(
+        "PushManager: Subscription created and endpoint saved to localStorage"
+      );
 
       console.log("PushManager: Subscription created:", this.subscription);
 
@@ -106,24 +113,35 @@ class PushManager {
 
   async unsubscribe() {
     if (!this.subscription) {
+      // Coba hapus dari server berdasarkan endpoint yang tersimpan
+      await this._removeSubscriptionFromServer();
+      this.isSubscribed = false;
+      localStorage.removeItem("lastPushEndpoint");
       return true;
     }
 
     try {
+      // Coba unsubscribe dari push service
       const success = await this.subscription.unsubscribe();
+
+      // Jika unsubscribe gagal, tetap lanjutkan dengan menghapus lokal
       if (!success) {
-        throw new Error("Unsubscribe failed");
+        console.warn(
+          "PushManager: Unsubscribe returned false, but continuing with local cleanup"
+        );
+        // Jangan throw error, lanjutkan dengan cleanup lokal
       }
 
+      // SELALU lakukan cleanup lokal meskipun unsubscribe gagal
       this.subscription = null;
       this.isSubscribed = false;
+      localStorage.removeItem("lastPushEndpoint");
 
-      // Coba hapus dari server
-      const serverResult = await this._removeSubscriptionFromServer();
-      if (!serverResult.success) {
-        console.warn(
-          "PushManager: Server unsubscription failed, but local subscription removed"
-        );
+      // Coba hapus dari server (tapi jangan block jika gagal)
+      try {
+        await this._removeSubscriptionFromServer();
+      } catch (serverError) {
+        console.warn("PushManager: Server unsubscription failed:", serverError);
       }
 
       this._showLocalNotification(
@@ -131,14 +149,30 @@ class PushManager {
         "Anda tidak akan menerima notifikasi lagi."
       );
 
-      return true;
+      return true; // Selanggap return true karena cleanup lokal berhasil
     } catch (error) {
       console.error("PushManager: Unsubscribe error:", error);
+
+      // Tetap lakukan cleanup lokal meskipun ada error
+      this.subscription = null;
+      this.isSubscribed = false;
+      localStorage.removeItem("lastPushEndpoint");
+
+      // Tetap coba hapus dari server
+      try {
+        await this._removeSubscriptionFromServer();
+      } catch (serverError) {
+        console.warn(
+          "PushManager: Server unsubscription failed during error cleanup:",
+          serverError
+        );
+      }
+
       this._showLocalNotification(
         "⚠️ Peringatan",
         "Notifikasi dimatikan secara lokal, tetapi mungkin masih aktif di server."
       );
-      return false;
+      return true; // Kembalikan true karena cleanup lokal berhasil
     }
   }
 
@@ -216,18 +250,30 @@ class PushManager {
   }
 
   async _removeSubscriptionFromServer() {
-    if (!this.subscription) {
-      return { success: false, error: "No subscription" };
-    }
-
     const token = localStorage.getItem("authToken");
     if (!token) {
+      console.log("PushManager: No auth token, skipping server unsubscription");
       return { success: false, error: "No auth token" };
     }
 
-    try {
+    // Jika tidak ada subscription, tetap coba hapus berdasarkan endpoint yang tersimpan
+    let endpoint;
+    if (this.subscription) {
       const subscriptionJSON = this.subscription.toJSON();
+      endpoint = subscriptionJSON.endpoint;
+    } else {
+      // Coba dapatkan endpoint dari localStorage sebagai fallback
+      endpoint = localStorage.getItem("lastPushEndpoint");
+    }
 
+    if (!endpoint) {
+      console.log(
+        "PushManager: No endpoint available for server unsubscription"
+      );
+      return { success: false, error: "No endpoint available" };
+    }
+
+    try {
       const response = await fetch(
         "https://story-api.dicoding.dev/v1/notifications/subscribe",
         {
@@ -236,13 +282,17 @@ class PushManager {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            endpoint: subscriptionJSON.endpoint,
-          }),
+          body: JSON.stringify({ endpoint }),
         }
       );
 
       if (!response.ok) {
+        // Jangan throw error untuk status 404 (endpoint sudah dihapus)
+        if (response.status === 404) {
+          console.log("PushManager: Subscription already removed from server");
+          return { success: true };
+        }
+
         const errorText = await response.text();
         console.warn(
           "PushManager: Server unsubscription failed:",
@@ -305,6 +355,7 @@ class PushManager {
       permission: Notification.permission,
       isInitialized: this._isInitialized,
       subscription: this.subscription ? this.subscription.toJSON() : null,
+      storedEndpoint: localStorage.getItem("lastPushEndpoint"),
     };
   }
 
@@ -318,6 +369,31 @@ class PushManager {
     }
 
     return status;
+  }
+
+  // Method untuk force cleanup (jika ada masalah)
+  async forceCleanup() {
+    console.log("PushManager: Force cleanup initiated");
+
+    // Unsubscribe jika ada subscription aktif
+    if (this.subscription) {
+      try {
+        await this.subscription.unsubscribe();
+      } catch (error) {
+        console.warn("PushManager: Force cleanup - unsubscribe failed:", error);
+      }
+    }
+
+    // Reset semua state
+    this.subscription = null;
+    this.isSubscribed = false;
+    localStorage.removeItem("lastPushEndpoint");
+
+    // Coba hapus dari server
+    await this._removeSubscriptionFromServer();
+
+    console.log("PushManager: Force cleanup completed");
+    return true;
   }
 }
 
