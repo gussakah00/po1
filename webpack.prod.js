@@ -15,7 +15,7 @@ module.exports = merge(common, {
       new TerserPlugin({
         terserOptions: {
           compress: {
-            drop_console: true, // Hapus console.log di production
+            drop_console: true,
           },
         },
       }),
@@ -32,8 +32,8 @@ module.exports = merge(common, {
     },
   },
   performance: {
-    maxEntrypointSize: 250000, // 250KB
-    maxAssetSize: 250000, // 250KB
+    maxEntrypointSize: 250000,
+    maxAssetSize: 250000,
   },
   module: {
     rules: [

@@ -1,14 +1,27 @@
-const CACHE_NAME = "cerita-di-sekitarmu-v8";
+const CACHE_NAME = "cerita-di-sekitarmu-v9";
 const STATIC_ASSETS = [
-  "/",
-  "/index.html",
-  "/styles/styles.css",
-  "/app.bundle.js",
-  "/vendors.bundle.js",
-  "/app.webmanifest",
-  "/favicon.png",
-  "/icons/icon-192x192.png",
-  "/icons/icon-512x512.png",
+  "/po1/",
+  "/po1/index.html",
+  "/po1/app.css",
+  "/po1/app.bundle.js",
+  "/po1/vendors.bundle.js",
+  "/po1/app.webmanifest",
+  "/po1/favicon.png",
+  "/po1/icons/icon-72x72.png",
+  "/po1/icons/icon-96x96.png",
+  "/po1/icons/icon-128x128.png",
+  "/po1/icons/icon-144x144.png",
+  "/po1/icons/icon-152x152.png",
+  "/po1/icons/icon-192x192.png",
+  "/po1/icons/icon-384x384.png",
+  "/po1/icons/icon-512x512.png",
+  "/po1/images/logo.png",
+  "/po1/images/mark.png",
+  "/po1/leaflet-images/layers-2x.png",
+  "/po1/leaflet-images/layers.png",
+  "/po1/leaflet-images/marker-icon-2x.png",
+  "/po1/leaflet-images/marker-icon.png",
+  "/po1/leaflet-images/marker-shadow.png",
 ];
 
 // Install event
@@ -47,30 +60,23 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch event - FIXED VERSION
+// Fetch event
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // 🚨 CRITICAL FIX: Skip non-GET requests
+  // Skip non-GET requests
   if (event.request.method !== "GET") return;
 
-  // 🚨 CRITICAL FIX: Skip external requests
+  // Skip external requests
   if (!url.origin.startsWith(self.location.origin)) return;
 
-  // 🚨 CRITICAL FIX: Skip URLs with hash (SPA routing)
+  // Skip URLs with hash (SPA routing)
   if (url.hash && url.hash !== "") {
     console.log("Service Worker: Skipping hash URL", url.href);
     return;
   }
 
-  // 🚨 CRITICAL FIX: Skip development server
-  if (url.hostname === "localhost" || url.port === "3000") {
-    console.log("Service Worker: Skipping development URL", url.href);
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
-  // 🚨 CRITICAL FIX: Skip API requests (handle separately)
+  // Skip API requests
   if (
     url.pathname.includes("/api/") ||
     url.href.includes("story-api.dicoding.dev")
@@ -120,7 +126,7 @@ async function cacheFirstStrategy(request) {
 
     // Fallback untuk halaman
     if (request.destination === "document") {
-      const fallback = await caches.match("/index.html");
+      const fallback = await caches.match("/po1/index.html");
       if (fallback) {
         console.log("Service Worker: Serving fallback index.html");
         return fallback;
@@ -139,13 +145,27 @@ async function networkFirstStrategy(request) {
   try {
     console.log("Service Worker: Network First strategy", request.url);
     const networkResponse = await fetch(request);
+
+    // Cache API responses jika berhasil
+    if (networkResponse.ok && request.url.includes("/api/")) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, networkResponse.clone());
+    }
+
     return networkResponse;
   } catch (error) {
     console.log(
-      "Service Worker: Network First failed, no fallback",
+      "Service Worker: Network First failed, trying cache",
       request.url,
       error
     );
+
+    // Coba serve dari cache untuk API calls
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      console.log("Service Worker: Serving API from cache", request.url);
+      return cachedResponse;
+    }
 
     // Return error response untuk API calls
     if (request.url.includes("/api/")) {
@@ -173,9 +193,9 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: "Ada cerita baru di sekitarmu!",
-    icon: "/icons/icon-192x192.png",
-    badge: "/icons/icon-72x72.png",
-    data: { url: "/" },
+    icon: "/po1/icons/icon-192x192.png",
+    badge: "/po1/icons/icon-72x72.png",
+    data: { url: "/po1/" },
   };
 
   event.waitUntil(
@@ -187,5 +207,16 @@ self.addEventListener("notificationclick", (event) => {
   console.log("Service Worker: Notification clicked");
   event.notification.close();
 
-  event.waitUntil(clients.openWindow("/"));
+  event.waitUntil(
+    clients.matchAll({ type: "window" }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes("/po1/") && "focus" in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow("/po1/");
+      }
+    })
+  );
 });

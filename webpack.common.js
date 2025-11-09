@@ -4,49 +4,67 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 module.exports = {
   entry: {
-    app: path.resolve(__dirname, "src/scripts/index.js"),
+    app: "./src/scripts/index.js",
   },
   output: {
     filename: "[name].bundle.js",
     path: path.resolve(__dirname, "dist"),
     clean: true,
   },
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: "./src/index.html",
+      filename: "index.html",
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: "src/public",
+          to: "",
+          globOptions: {
+            ignore: ["**/generate-icons.js"],
+          },
+        },
+        // Salin sw.js dari root
+        {
+          from: "sw.js",
+          to: "sw.js",
+        },
+        // Salin app.webmanifest
+        {
+          from: "app.webmanifest",
+          to: "app.webmanifest",
+        },
+        // Salin file lain di root jika ada
+        {
+          from: "*.json",
+          to: "",
+          globOptions: {
+            ignore: ["**/package*.json", "**/tsconfig.json"],
+          },
+        },
+      ],
+    }),
+  ],
   module: {
     rules: [
       {
-        test: /\.(png|jpe?g|gif)$/i,
+        test: /\.(png|svg|jpg|jpeg|gif)$/i,
         type: "asset/resource",
         generator: {
           filename: "images/[name][ext]",
         },
       },
+      {
+        test: /\.(woff|woff2|eot|ttf|otf)$/i,
+        type: "asset/resource",
+        generator: {
+          filename: "fonts/[name][ext]",
+        },
+      },
     ],
   },
-  plugins: [
-    new HtmlWebpackPlugin({
-      filename: "index.html",
-      template: path.resolve(__dirname, "src/index.html"),
-      favicon: path.resolve(__dirname, "src/public/favicon.png"), // PATH YANG BENAR
-    }),
-    new CopyWebpackPlugin({
-      patterns: [
-        {
-          from: path.resolve(__dirname, "src/public/"),
-          to: path.resolve(__dirname, "dist/"),
-        },
-        {
-          from: path.resolve(__dirname, "src/styles/"),
-          to: path.resolve(__dirname, "dist/styles/"),
-        },
-        {
-          from: path.resolve(__dirname, "sw.js"),
-          to: path.resolve(__dirname, "dist/"),
-        },
-        {
-          from: path.resolve(__dirname, "app.webmanifest"),
-          to: path.resolve(__dirname, "dist/"),
-        },
-      ],
-    }),
-  ],
+  resolve: {
+    extensions: [".js"],
+  },
 };
