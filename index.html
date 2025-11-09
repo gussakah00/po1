@@ -1,0 +1,353 @@
+<!doctype html><html lang="id"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Cerita di Sekitarmu</title><link rel="manifest" href="app.webmanifest" crossorigin="use-credentials"/><meta name="theme-color" content="#1976d2"/><meta name="apple-mobile-web-app-status-bar-style" content="default"/><meta name="apple-mobile-web-app-capable" content="yes"/><meta name="mobile-web-app-capable" content="yes"/><meta name="apple-mobile-web-app-title" content="CeritaSekitar"/><link rel="icon" href="icons/icon-192x192.png" type="image/png"/><link rel="apple-touch-icon" href="icons/icon-192x192.png"/><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.css"/><style>/* Install Button Styles */
+      .install-button {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: #1976d2;
+        color: white;
+        border: none;
+        border-radius: 25px;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+        font-size: 14px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+      }
+
+      .install-button:hover {
+        background: #1565c0;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+      }
+
+      .install-button.hidden {
+        display: none;
+      }
+
+      .install-button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+      }</style><link rel="icon" href="/po1/favicon.png"><script defer="defer" src="/po1/app.bundle.js"></script><link href="/po1/app.css" rel="stylesheet"></head><body><a href="#main-content" class="skip-link" aria-label="Lewati ke Konten Utama">Lewati ke Konten Utama</a><header><div class="main-header container"><a class="brand-name" href="#/beranda">Cerita di Sekitarmu</a><nav id="navigation-drawer" class="navigation-drawer"><ul id="nav-list" class="nav-list"></ul></nav><button id="drawer-button" class="drawer-button">☰</button></div></header><main id="main-content" class="main-content" tabindex="-1"></main><script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script><script>// Enhanced PWA Installation dengan error handling
+      let deferredPrompt = null;
+      let installButton = null;
+      let isAppInstalled = false;
+
+      // Check jika app sudah terinstall
+      function checkIfAppInstalled() {
+        if (window.matchMedia("(display-mode: standalone)").matches) {
+          console.log("App is running in standalone mode");
+          isAppInstalled = true;
+          return true;
+        }
+
+        // Check untuk browsers yang support getInstalledRelatedApps
+        if ("getInstalledRelatedApps" in navigator) {
+          navigator.getInstalledRelatedApps().then((apps) => {
+            if (apps.length > 0) {
+              console.log(
+                "App is installed (detected via getInstalledRelatedApps)"
+              );
+              isAppInstalled = true;
+            }
+          });
+        }
+
+        return false;
+      }
+
+      // Register Service Worker dengan robust error handling
+      function registerServiceWorker() {
+        if ("serviceWorker" in navigator) {
+          // Tunggu sampai window fully loaded
+          if (document.readyState === "loading") {
+            window.addEventListener("load", initializeServiceWorker);
+          } else {
+            initializeServiceWorker();
+          }
+        } else {
+          console.log("Service Worker not supported in this browser");
+        }
+      }
+
+      async function initializeServiceWorker() {
+        try {
+          console.log("Initializing Service Worker...");
+
+          // Tunggu sedikit untuk memastikan resources loaded
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          const registration = await navigator.serviceWorker.register(
+            "/sw.js",
+            {
+              scope: "/",
+            }
+          );
+
+          console.log("Service Worker registered successfully:", registration);
+
+          // Track service worker state
+          if (registration.installing) {
+            console.log("Service Worker installing...");
+            registration.installing.addEventListener("statechange", (e) => {
+              console.log("Service Worker state:", e.target.state);
+            });
+          } else if (registration.waiting) {
+            console.log("Service Worker waiting...");
+          } else if (registration.active) {
+            console.log("Service Worker active and ready!");
+          }
+
+          // Listen for updates
+          registration.addEventListener("updatefound", () => {
+            const newWorker = registration.installing;
+            console.log("New Service Worker found:", newWorker);
+
+            newWorker.addEventListener("statechange", () => {
+              console.log("New Service Worker state:", newWorker.state);
+              if (
+                newWorker.state === "installed" &&
+                navigator.serviceWorker.controller
+              ) {
+                console.log("New content available; please refresh.");
+              }
+            });
+          });
+
+          // Handle controller change
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            console.log(
+              "Service Worker controller changed - page will refresh"
+            );
+            window.location.reload();
+          });
+        } catch (error) {
+          console.error("Service Worker registration failed:", error);
+
+          // Fallback: unregister problematic service worker
+          try {
+            const registrations =
+              await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+              await registration.unregister();
+              console.log("Unregistered problematic Service Worker");
+            }
+          } catch (unregisterError) {
+            console.error(
+              "Failed to unregister Service Worker:",
+              unregisterError
+            );
+          }
+        }
+      }
+
+      // Install Prompt Handler
+      function setupInstallPrompt() {
+        window.addEventListener("beforeinstallprompt", (e) => {
+          console.log("Before install prompt triggered");
+
+          // Prevent Chrome 67 and earlier from automatically showing the prompt
+          e.preventDefault();
+
+          // Stash the event so it can be triggered later
+          deferredPrompt = e;
+
+          // Update UI to notify the user they can install the PWA
+          console.log("App can be installed");
+
+          // Show install button after a short delay
+          setTimeout(showInstallPromotion, 3000);
+        });
+
+        // Listen for app installation
+        window.addEventListener("appinstalled", (e) => {
+          console.log("App was successfully installed");
+          isAppInstalled = true;
+
+          if (installButton) {
+            installButton.classList.add("hidden");
+            installButton.disabled = true;
+          }
+
+          deferredPrompt = null;
+
+          // Analytics atau tracking bisa ditambahkan di sini
+          console.log("PWA installed successfully");
+        });
+      }
+
+      // Show install promotion button
+      function showInstallPromotion() {
+        // Don't show if already installed
+        if (isAppInstalled || checkIfAppInstalled()) {
+          console.log("Install promotion: App already installed");
+          return;
+        }
+
+        // Don't show if no deferred prompt
+        if (!deferredPrompt) {
+          console.log("Install promotion: No deferred prompt available");
+          return;
+        }
+
+        // Don't show if button already exists
+        if (installButton) {
+          return;
+        }
+
+        console.log("Showing install promotion button");
+
+        // Create install button
+        installButton = document.createElement("button");
+        installButton.textContent = "📱 Install Aplikasi";
+        installButton.className = "install-button";
+        installButton.setAttribute(
+          "aria-label",
+          "Install Cerita di Sekitarmu aplikasi"
+        );
+        installButton.setAttribute(
+          "title",
+          "Install aplikasi untuk pengalaman yang lebih baik"
+        );
+
+        // Add click handler
+        installButton.addEventListener("click", async () => {
+          if (!deferredPrompt) {
+            console.log("No deferred prompt available");
+            return;
+          }
+
+          console.log("Showing install prompt to user");
+
+          // Disable button while processing
+          installButton.textContent = "Menginstall...";
+          installButton.disabled = true;
+
+          try {
+            // Show the install prompt
+            deferredPrompt.prompt();
+
+            // Wait for the user to respond to the prompt
+            const { outcome } = await deferredPrompt.userChoice;
+
+            console.log(`User response to install prompt: ${outcome}`);
+
+            // We've used the prompt, and can't use it again, discard it
+            deferredPrompt = null;
+
+            if (outcome === "accepted") {
+              console.log("User accepted the install prompt");
+              installButton.classList.add("hidden");
+
+              // Optional: Track installation success
+              setTimeout(() => {
+                if (checkIfAppInstalled()) {
+                  console.log("App installation confirmed");
+                }
+              }, 1000);
+            } else {
+              console.log("User dismissed the install prompt");
+
+              // Re-enable button
+              installButton.textContent = "📱 Install Aplikasi";
+              installButton.disabled = false;
+
+              // Hide button for a while if user dismissed
+              setTimeout(() => {
+                if (installButton && !isAppInstalled) {
+                  installButton.style.display = "none";
+                  setTimeout(() => {
+                    if (installButton && !isAppInstalled) {
+                      installButton.style.display = "block";
+                    }
+                  }, 30000); // Show again after 30 seconds
+                }
+              }, 2000);
+            }
+          } catch (error) {
+            console.error("Error showing install prompt:", error);
+
+            // Re-enable button on error
+            installButton.textContent = "📱 Install Aplikasi";
+            installButton.disabled = false;
+          }
+        });
+
+        // Add button to page
+        document.body.appendChild(installButton);
+
+        // Auto-hide after 30 seconds if not clicked
+        setTimeout(() => {
+          if (installButton && !installButton.disabled && !isAppInstalled) {
+            installButton.style.display = "none";
+            console.log("Auto-hiding install button");
+          }
+        }, 30000);
+      }
+
+      // Periodic check for installability
+      function startInstallabilityCheck() {
+        setInterval(() => {
+          if (deferredPrompt && !installButton && !isAppInstalled) {
+            console.log("Periodic check: Showing install promotion");
+            showInstallPromotion();
+          }
+        }, 60000); // Check every minute
+      }
+
+      // Initialize everything when DOM is ready
+      function initializeApp() {
+        console.log("Initializing PWA features...");
+
+        // Check initial installation status
+        checkIfAppInstalled();
+
+        // Register Service Worker
+        registerServiceWorker();
+
+        // Setup install prompt
+        setupInstallPrompt();
+
+        // Start periodic checks
+        startInstallabilityCheck();
+
+        console.log("PWA features initialized successfully");
+      }
+
+      // Start initialization when DOM is ready
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initializeApp);
+      } else {
+        initializeApp();
+      }
+
+      // Fallback: Manual service worker cleanup (for development)
+      window.cleanupServiceWorkers = async function () {
+        if ("serviceWorker" in navigator) {
+          try {
+            const registrations =
+              await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+              await registration.unregister();
+              console.log("Service Worker unregistered:", registration);
+            }
+            console.log("All Service Workers cleaned up");
+          } catch (error) {
+            console.error("Error cleaning up Service Workers:", error);
+          }
+        }
+      };
+
+      // Utility function untuk development
+      window.checkPWAStatus = function () {
+        return {
+          isAppInstalled: isAppInstalled,
+          hasDeferredPrompt: !!deferredPrompt,
+          hasInstallButton: !!installButton,
+          serviceWorker: navigator.serviceWorker
+            ? "supported"
+            : "not supported",
+        };
+      };</script></body></html>
