@@ -23,16 +23,19 @@ module.exports = {
           to: "",
           noErrorOnMissing: true,
         },
-        // PASTIKAN sw.js DISALIN
         {
           from: "sw.js",
           to: "sw.js",
-          noErrorOnMissing: false, // false agar error jika file tidak ditemukan
+          noErrorOnMissing: false,
         },
         {
           from: "app.webmanifest",
           to: "app.webmanifest",
           noErrorOnMissing: false,
+        },
+        {
+          from: "node_modules/leaflet/dist/images",
+          to: "leaflet-images",
         },
       ],
     }),

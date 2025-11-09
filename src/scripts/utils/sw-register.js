@@ -1,16 +1,7 @@
+// src/scripts/utils/sw-register.js
 export const registerSW = () => {
   return new Promise((resolve) => {
-    if (
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.port === "3000"
-    ) {
-      console.log("🚫 Service Worker DISABLED in development");
-      resolve(null);
-      return;
-    }
-
-    if (!navigator.serviceWorker) {
+    if (!("serviceWorker" in navigator)) {
       console.log("🚫 Service Worker not supported");
       resolve(null);
       return;
@@ -18,16 +9,35 @@ export const registerSW = () => {
 
     console.log("🌐 Registering Service Worker...");
 
-    const swUrl = "/po1/sw.js";
+    // ✅ PASTIKAN PATH BENAR - gunakan absolute path
+    const swUrl = window.location.pathname.includes("/po1")
+      ? "/po1/sw.js"
+      : "/sw.js";
 
-    navigator.serviceWorker
-      .register(swUrl)
+    console.log("📁 SW URL:", swUrl);
+
+    // Cek dulu apakah file SW ada
+    fetch(swUrl)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`SW file not found (${response.status})`);
+        }
+        return navigator.serviceWorker.register(swUrl);
+      })
       .then((registration) => {
         console.log("✅ Service Worker registered successfully");
+        console.log("📌 Scope:", registration.scope);
         resolve(registration);
       })
       .catch((error) => {
-        console.log("❌ Service Worker registration failed:", error);
+        console.error("❌ Service Worker registration failed:", error.message);
+        // Unregister SW yang problematic
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => {
+            console.log("🗑️ Unregistering old SW:", registration.scope);
+            registration.unregister();
+          });
+        });
         resolve(null);
       });
   });
