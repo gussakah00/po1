@@ -1,34 +1,15 @@
-import L from "leaflet";
 import { fetchStoriesWithToken } from "../../data/api.js";
 import { authService } from "../../utils/auth.js";
 import { idbManager } from "../../utils/idb-manager.js";
-
-// Fix Leaflet default icon issue
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-});
-
-const defaultIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
 
 const HomePage = {
   _map: null,
   _markers: [],
   _stories: [],
   _filteredStories: [],
-  _currentFilter: 'all',
-  _currentSort: 'newest',
-  _searchQuery: '',
+  _currentFilter: "all",
+  _currentSort: "newest",
+  _searchQuery: "",
 
   async render() {
     if (!authService.isLoggedIn()) {
@@ -46,7 +27,6 @@ const HomePage = {
 
     return `
       <section class="home-page" aria-labelledby="home-title">
-        <h1 id="home-title" tabindex="0">Cerita di Sekitarmu</h1>
         
         <!-- Controls Section -->
         <div class="story-controls">
@@ -101,66 +81,158 @@ const HomePage = {
   async afterRender() {
     if (!authService.isLoggedIn()) return;
 
+    console.log("HomePage: afterRender started");
+
+    // Tunggu sebentar untuk memastikan DOM sudah selesai di-render
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     await this._initializeMap();
-    await this._loadStories();
+    await this._loadStories(); // Pastikan method ini ada
     this._setupControls();
     this._checkOfflineStories();
+
+    console.log("HomePage: afterRender completed");
   },
 
-  _setupControls() {
-    // Search functionality
-    const searchInput = document.getElementById('story-search');
-    const searchButton = document.getElementById('search-button');
-    
-    const performSearch = () => {
-      this._searchQuery = searchInput.value.trim();
-      this._applyFilters();
+  async _initializeMap() {
+    console.log("HomePage: Initializing map...");
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const mapContainer = document.querySelector("#map");
+    console.log("HomePage: Map container:", mapContainer);
+
+    if (!mapContainer) {
+      console.error("HomePage: Map container not found, retrying...");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const retryContainer = document.querySelector("#map");
+      if (!retryContainer) {
+        throw new Error("Map container not found after retry");
+      }
+    }
+
+    try {
+      if (typeof L === "undefined") {
+        console.error("Leaflet not loaded");
+        throw new Error(
+          "Leaflet library not found. Please check if Leaflet CDN is loaded."
+        );
+      }
+
+      if (this._map) {
+        this._map.remove();
+        this._map = null;
+      }
+
+      if (mapContainer.offsetHeight === 0) {
+        mapContainer.style.height = "400px";
+      }
+
+      console.log("HomePage: Creating Leaflet map...");
+      this._map = L.map("map").setView([-2.5, 118.0], 5);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18,
+        minZoom: 3,
+      }).addTo(this._map);
+
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl:
+          "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
+        iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
+        shadowUrl:
+          "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
+      });
+
+      L.Marker.prototype.options.icon = L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
+        iconRetinaUrl:
+          "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
+        shadowUrl:
+          "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      });
+
+      this._map.on("tileerror", (error) => {
+        console.error("Map tile error:", error);
+      });
+
+      this._map.whenReady(() => {
+        console.log("HomePage: Map is ready");
+      });
+
+      console.log("HomePage: Map initialized successfully");
+      return this._map;
+    } catch (error) {
+      console.error("Error initializing map:", error);
+      const mapContainerElement = document.querySelector("#map-container");
+      if (mapContainerElement) {
+        mapContainerElement.innerHTML = `
+          <div style="text-align: center; padding: 40px; color: #666; background: #f5f5f5; border-radius: 8px;">
+            <p style="margin-bottom: 15px;">Tidak dapat memuat peta</p>
+            <p style="margin-bottom: 20px; font-size: 14px;">Error: ${error.message}</p>
+            <button onclick="window.location.reload()" style="padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              Refresh Halaman
+            </button>
+          </div>
+        `;
+      }
+      throw error;
+    }
+    const baseLayers = {
+      OpenStreetMap: L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 18,
+        }
+      ),
+      Satellite: L.tileLayer(
+        "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        {
+          attribution: "&copy; Google Satellite",
+          maxZoom: 20,
+          subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        }
+      ),
+      "Dark Mode": L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        {
+          attribution: "&copy; CartoDB",
+          maxZoom: 18,
+        }
+      ),
     };
 
-    searchInput.addEventListener('input', performSearch);
-    searchButton.addEventListener('click', performSearch);
-    searchInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') performSearch();
-    });
+    // Add default layer
+    baseLayers["OpenStreetMap"].addTo(this._map);
 
-    // Filter functionality
-    const locationFilter = document.getElementById('location-filter');
-    const sortBy = document.getElementById('sort-by');
-    
-    locationFilter.addEventListener('change', (e) => {
-      this._currentFilter = e.target.value;
-      this._applyFilters();
-    });
-
-    sortBy.addEventListener('change', (e) => {
-      this._currentSort = e.target.value;
-      this._applyFilters();
-    });
-
-    // Favorites view
-    const favoritesButton = document.getElementById('toggle-favorites-view');
-    favoritesButton.addEventListener('click', () => this._showFavorites());
-
-    // Sync offline data
-    const syncButton = document.getElementById('sync-offline-data');
-    syncButton.addEventListener('click', () => this._syncOfflineData());
+    // Add layer control
+    L.control.layers(baseLayers).addTo(this._map);
   },
 
+  // PASTIKAN SEMUA METHOD ADA DI BAWAH INI:
+
   async _loadStories() {
+    console.log("HomePage: Loading stories...");
     const container = document.querySelector("#story-list");
     const loadingMessage = document.querySelector("#loading-message");
 
     try {
-      // Coba load dari API dulu
       let stories = await fetchStoriesWithToken();
-      
+
       if (stories && stories.length > 0) {
-        // Simpan ke IndexedDB
         await idbManager.saveStories(stories);
         this._stories = stories;
       } else {
-        // Fallback ke IndexedDB jika API gagal
-        console.log('Loading from IndexedDB...');
+        console.log("Loading from IndexedDB...");
         this._stories = await idbManager.getStories();
       }
 
@@ -168,48 +240,90 @@ const HomePage = {
 
       this._displayStories();
       this._updateStats();
-
     } catch (error) {
-      console.error('Error loading stories:', error);
-      
-      // Fallback ke IndexedDB
+      console.error("Error loading stories:", error);
+
       try {
         this._stories = await idbManager.getStories();
         this._displayStories();
         this._updateStats();
-        
+
         if (loadingMessage) loadingMessage.remove();
-        
+
         container.innerHTML += `
           <div class="offline-warning">
             <p>⚠️ Anda sedang offline. Menampilkan data yang tersimpan.</p>
           </div>
         `;
       } catch (idbError) {
-        console.error('Error loading from IndexedDB:', idbError);
-        this._showError('Gagal memuat cerita.');
+        console.error("Error loading from IndexedDB:", idbError);
+        this._showError("Gagal memuat cerita.");
       }
+    }
+  },
+
+  _setupControls() {
+    console.log("HomePage: Setting up controls...");
+    // Search functionality
+    const searchInput = document.getElementById("story-search");
+    const searchButton = document.getElementById("search-button");
+
+    const performSearch = () => {
+      this._searchQuery = searchInput.value.trim();
+      this._applyFilters();
+    };
+
+    if (searchInput && searchButton) {
+      searchInput.addEventListener("input", performSearch);
+      searchButton.addEventListener("click", performSearch);
+      searchInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") performSearch();
+      });
+    }
+
+    const locationFilter = document.getElementById("location-filter");
+    const sortBy = document.getElementById("sort-by");
+
+    if (locationFilter) {
+      locationFilter.addEventListener("change", (e) => {
+        this._currentFilter = e.target.value;
+        this._applyFilters();
+      });
+    }
+
+    if (sortBy) {
+      sortBy.addEventListener("change", (e) => {
+        this._currentSort = e.target.value;
+        this._applyFilters();
+      });
+    }
+
+    const favoritesButton = document.getElementById("toggle-favorites-view");
+    if (favoritesButton) {
+      favoritesButton.addEventListener("click", () => this._showFavorites());
+    }
+
+    const syncButton = document.getElementById("sync-offline-data");
+    if (syncButton) {
+      syncButton.addEventListener("click", () => this._syncOfflineData());
     }
   },
 
   async _applyFilters() {
     let filtered = [...this._stories];
 
-    // Apply search filter
     if (this._searchQuery) {
       filtered = await idbManager.searchStories(this._searchQuery);
     }
 
-    // Apply location filter
-    if (this._currentFilter === 'with-location') {
-      filtered = filtered.filter(story => story.lat && story.lon);
-    } else if (this._currentFilter === 'without-location') {
-      filtered = filtered.filter(story => !story.lat || !story.lon);
+    if (this._currentFilter === "with-location") {
+      filtered = filtered.filter((story) => story.lat && story.lon);
+    } else if (this._currentFilter === "without-location") {
+      filtered = filtered.filter((story) => !story.lat || !story.lon);
     }
 
-    // Apply sorting
-    const sortOrder = this._currentSort === 'newest' ? 'desc' : 'asc';
-    filtered = await idbManager.sortStories('createdAt', sortOrder);
+    const sortOrder = this._currentSort === "newest" ? "desc" : "asc";
+    filtered = await idbManager.sortStories("createdAt", sortOrder);
 
     this._filteredStories = filtered;
     this._displayStories();
@@ -218,8 +332,8 @@ const HomePage = {
 
   async _displayStories() {
     const container = document.querySelector("#story-list");
-    const storiesToDisplay = this._filteredStories.length > 0 ? 
-                           this._filteredStories : this._stories;
+    const storiesToDisplay =
+      this._filteredStories.length > 0 ? this._filteredStories : this._stories;
 
     if (!storiesToDisplay || storiesToDisplay.length === 0) {
       container.innerHTML = `
@@ -235,29 +349,33 @@ const HomePage = {
       storiesToDisplay.map(async (story, index) => {
         const displayInfo = this._extractStoryDisplayInfo(story);
         const isFavorite = await idbManager.isFavorite(story.id);
-        
+
         return this._createStoryCard(story, displayInfo, index, isFavorite);
       })
     );
 
-    container.innerHTML = storyItems.join('');
+    container.innerHTML = storyItems.join("");
     this._setupStoryInteractivity();
     this._updateMapMarkers(storiesToDisplay);
   },
 
   _createStoryCard(story, displayInfo, index, isFavorite) {
     const hasValidCoordinates = story.lat && story.lon;
-    
+
     return `
-      <article class="story-card" data-index="${index}" data-story-id="${story.id}"
+      <article class="story-card" data-index="${index}" data-story-id="${
+      story.id
+    }"
                data-has-coordinates="${hasValidCoordinates}"
                aria-label="Cerita: ${displayInfo.title}">
         <div class="story-header">
           <h3>${displayInfo.title}</h3>
-          <button class="favorite-btn ${isFavorite ? 'favorited' : ''}" 
+          <button class="favorite-btn ${isFavorite ? "favorited" : ""}" 
                   data-story-id="${story.id}"
-                  aria-label="${isFavorite ? 'Hapus dari favorit' : 'Tambahkan ke favorit'}">
-            ${isFavorite ? '❤️' : '🤍'}
+                  aria-label="${
+                    isFavorite ? "Hapus dari favorit" : "Tambahkan ke favorit"
+                  }">
+            ${isFavorite ? "❤️" : "🤍"}
           </button>
         </div>
         
@@ -270,8 +388,11 @@ const HomePage = {
         <div class="story-content">
           <p>${displayInfo.description}</p>
           <div class="story-meta">
-            <small>Lokasi: ${hasValidCoordinates ? 
-              `${story.lat}, ${story.lon}` : "Tidak tersedia"}</small>
+            <small>Lokasi: ${
+              hasValidCoordinates
+                ? `${story.lat}, ${story.lon}`
+                : "Tidak tersedia"
+            }</small>
             ${displayInfo.dateInfo}
           </div>
         </div>
@@ -280,130 +401,146 @@ const HomePage = {
           <button class="action-btn share-btn" data-story-id="${story.id}">
             🔗 Bagikan
           </button>
-          ${hasValidCoordinates ? `
+          ${
+            hasValidCoordinates
+              ? `
             <button class="action-btn map-btn" data-story-id="${story.id}">
               🗺️ Lihat di Peta
             </button>
-          ` : ''}
+          `
+              : ""
+          }
         </div>
       </article>
     `;
   },
 
   _setupStoryInteractivity() {
-    // Favorite buttons
-    document.querySelectorAll('.favorite-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
+    document.querySelectorAll(".favorite-btn").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
         e.stopPropagation();
         const storyId = btn.dataset.storyId;
-        const story = this._stories.find(s => s.id === storyId);
-        
-        if (btn.classList.contains('favorited')) {
+        const story = this._stories.find((s) => s.id === storyId);
+
+        if (btn.classList.contains("favorited")) {
           await idbManager.removeFavorite(storyId);
-          btn.classList.remove('favorited');
-          btn.innerHTML = '🤍';
-          btn.setAttribute('aria-label', 'Tambahkan ke favorit');
+          btn.classList.remove("favorited");
+          btn.innerHTML = "🤍";
+          btn.setAttribute("aria-label", "Tambahkan ke favorit");
         } else {
           await idbManager.addFavorite(storyId, story);
-          btn.classList.add('favorited');
-          btn.innerHTML = '❤️';
-          btn.setAttribute('aria-label', 'Hapus dari favorit');
+          btn.classList.add("favorited");
+          btn.innerHTML = "❤️";
+          btn.setAttribute("aria-label", "Hapus dari favorit");
         }
       });
     });
 
-    // Action buttons
-    document.querySelectorAll('.action-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    document.querySelectorAll(".action-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const storyId = btn.dataset.storyId;
-        
-        if (btn.classList.contains('share-btn')) {
+
+        if (btn.classList.contains("share-btn")) {
           this._shareStory(storyId);
-        } else if (btn.classList.contains('map-btn')) {
+        } else if (btn.classList.contains("map-btn")) {
           this._focusOnStoryMap(storyId);
         }
       });
     });
 
-    // Story card click untuk peta
-    document.querySelectorAll('.story-card[data-has-coordinates="true"]').forEach(card => {
-      card.addEventListener('click', () => {
-        const storyId = card.dataset.storyId;
-        this._focusOnStoryMap(storyId);
+    document
+      .querySelectorAll('.story-card[data-has-coordinates="true"]')
+      .forEach((card) => {
+        card.addEventListener("click", () => {
+          const storyId = card.dataset.storyId;
+          this._focusOnStoryMap(storyId);
+        });
       });
-    });
   },
 
   async _showFavorites() {
     const favorites = await idbManager.getFavorites();
-    
+
     if (favorites.length === 0) {
-      alert('Belum ada cerita favorit.');
+      alert("Belum ada cerita favorit.");
       return;
     }
 
     this._filteredStories = favorites;
     this._displayStories();
-    this._updateStats('favorit');
+    this._updateStats("favorit");
   },
 
   async _syncOfflineData() {
     try {
       const unsyncedStories = await idbManager.getUnsyncedStories();
-      
+
       if (unsyncedStories.length === 0) {
-        alert('Tidak ada data offline yang perlu disinkronisasi.');
+        alert("Tidak ada data offline yang perlu disinkronisasi.");
         return;
       }
 
-      alert(`Berhasil menyinkronisasi ${unsyncedStories.length} cerita offline.`);
+      alert(
+        `Berhasil menyinkronisasi ${unsyncedStories.length} cerita offline.`
+      );
       this._checkOfflineStories();
     } catch (error) {
-      console.error('Error syncing offline data:', error);
-      alert('Gagal menyinkronisasi data offline.');
+      console.error("Error syncing offline data:", error);
+      alert("Gagal menyinkronisasi data offline.");
     }
   },
 
   async _checkOfflineStories() {
     const offlineStories = await idbManager.getOfflineStories();
-    const unsyncedStories = offlineStories.filter(story => !story.synced);
-    
+    const unsyncedStories = offlineStories.filter((story) => !story.synced);
+
     if (unsyncedStories.length > 0) {
-      const offlineSection = document.getElementById('offline-stories-section');
-      const offlineList = document.getElementById('offline-stories-list');
-      
-      offlineSection.style.display = 'block';
-      offlineList.innerHTML = unsyncedStories.map(story => `
-        <div class="offline-story-item">
-          <p><strong>${story.description.substring(0, 50)}...</strong></p>
-          <small>Dibuat: ${new Date(story.createdAt).toLocaleDateString('id-ID')}</small>
-          <button class="sync-single-btn" data-story-id="${story.id}">
-            Sinkronisasi
-          </button>
-        </div>
-      `).join('');
+      const offlineSection = document.getElementById("offline-stories-section");
+      const offlineList = document.getElementById("offline-stories-list");
+
+      if (offlineSection && offlineList) {
+        offlineSection.style.display = "block";
+        offlineList.innerHTML = unsyncedStories
+          .map(
+            (story) => `
+          <div class="offline-story-item">
+            <p><strong>${story.description.substring(0, 50)}...</strong></p>
+            <small>Dibuat: ${new Date(story.createdAt).toLocaleDateString(
+              "id-ID"
+            )}</small>
+            <button class="sync-single-btn" data-story-id="${story.id}">
+              Sinkronisasi
+            </button>
+          </div>
+        `
+          )
+          .join("");
+      }
     }
   },
 
-  _updateStats(context = 'all') {
-    const statsElement = document.getElementById('story-stats');
-    const count = context === 'favorit' ? 
-                 this._filteredStories.length : 
-                 this._stories.length;
-    
+  _updateStats(context = "all") {
+    const statsElement = document.getElementById("story-stats");
+    if (!statsElement) return;
+
+    const count =
+      context === "favorit"
+        ? this._filteredStories.length
+        : this._stories.length;
+
     const filteredCount = this._filteredStories.length;
-    
+
     let statsText = `Menampilkan ${filteredCount} dari ${count} cerita`;
-    
+
     if (this._searchQuery) {
       statsText += ` untuk "${this._searchQuery}"`;
     }
-    
-    if (context === 'favorit') {
+
+    if (context === "favorit") {
       statsText = `Menampilkan ${filteredCount} cerita favorit`;
     }
-    
+
     statsElement.textContent = statsText;
   },
 
@@ -411,7 +548,11 @@ const HomePage = {
     let displayTitle = "Cerita Tanpa Judul";
     let displayDescription = story.description;
 
-    if (story.description && story.description.startsWith("**") && story.description.includes("**\n")) {
+    if (
+      story.description &&
+      story.description.startsWith("**") &&
+      story.description.includes("**\n")
+    ) {
       const parts = story.description.split("**\n");
       if (parts.length >= 2) {
         displayTitle = parts[0].replace("**", "").trim();
@@ -427,7 +568,9 @@ const HomePage = {
     if (story.createdAt) {
       try {
         const date = new Date(story.createdAt);
-        dateInfo = `<small>Diposting: ${date.toLocaleDateString("id-ID")}</small>`;
+        dateInfo = `<small>Diposting: ${date.toLocaleDateString(
+          "id-ID"
+        )}</small>`;
       } catch (e) {
         console.error("Error formatting date:", e);
       }
@@ -436,28 +579,28 @@ const HomePage = {
     return {
       title: displayTitle,
       description: displayDescription,
-      dateInfo: dateInfo
+      dateInfo: dateInfo,
     };
   },
 
   _shareStory(storyId) {
-    const story = this._stories.find(s => s.id === storyId);
+    const story = this._stories.find((s) => s.id === storyId);
     if (story && navigator.share) {
       const displayInfo = this._extractStoryDisplayInfo(story);
       navigator.share({
         title: displayInfo.title,
         text: displayInfo.description,
-        url: window.location.href
+        url: window.location.href,
       });
     } else {
-      alert('Fitur share tidak didukung di browser ini');
+      alert("Fitur share tidak didukung di browser ini");
     }
   },
 
   _focusOnStoryMap(storyId) {
-    const story = this._stories.find(s => s.id === storyId);
+    const story = this._stories.find((s) => s.id === storyId);
     if (story && story.lat && story.lon && this._map) {
-      const marker = this._markers.find(m => m.storyId === storyId);
+      const marker = this._markers.find((m) => m.storyId === storyId);
       if (marker) {
         marker.marker.openPopup();
         this._map.setView([story.lat, story.lon], 12);
@@ -467,6 +610,8 @@ const HomePage = {
 
   _showError(message) {
     const container = document.querySelector("#story-list");
+    if (!container) return;
+
     container.innerHTML = `
       <div style="text-align: center; padding: 40px; color: #666;">
         <p>${message}</p>
@@ -484,101 +629,73 @@ const HomePage = {
     }
   },
 
-  async _initializeMap() {
-    const mapContainer = document.querySelector("#map");
-    if (!mapContainer) {
-      throw new Error("Map container not found");
-    }
-
-    try {
-      if (this._map) {
-        this._map.remove();
-      }
-
-      this._map = L.map("map").setView([-2.5, 118.0], 5);
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 18,
-        minZoom: 3,
-      }).addTo(this._map);
-
-      L.Marker.prototype.options.icon = defaultIcon;
-
-      this._map.on("tileerror", (error) => {
-        console.error("Map tile error:", error);
-      });
-
-      return this._map;
-    } catch (error) {
-      console.error("Error initializing map:", error);
-      const mapContainer = document.querySelector("#map-container");
-      if (mapContainer) {
-        mapContainer.innerHTML = `
-          <div style="text-align: center; padding: 40px; color: #666; background: #f5f5f5; border-radius: 8px;">
-            <p style="margin-bottom: 15px;">Tidak dapat memuat peta</p>
-            <p style="margin-bottom: 20px; font-size: 14px;">Pastikan koneksi internet Anda stabil dan coba refresh halaman.</p>
-            <button onclick="window.location.reload()" style="padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer;">
-              Refresh Halaman
-            </button>
-          </div>
-        `;
-      }
-      throw error;
-    }
-  },
-
   _updateMapMarkers(stories) {
-    // Clear existing markers
-    this._markers.forEach(marker => {
+    this._markers.forEach((marker) => {
       if (marker.marker && this._map) {
         this._map.removeLayer(marker.marker);
       }
     });
     this._markers = [];
 
-    // Add new markers for stories with coordinates
-    stories.forEach(story => {
+    stories.forEach((story) => {
       if (story.lat && story.lon && this._map) {
         try {
           const displayInfo = this._extractStoryDisplayInfo(story);
-          const marker = L.marker([parseFloat(story.lat), parseFloat(story.lon)]).addTo(this._map);
-          
+          const marker = L.marker([
+            parseFloat(story.lat),
+            parseFloat(story.lon),
+          ]).addTo(this._map);
+
           marker.bindPopup(`
             <div style="max-width: 200px;">
               <strong>${displayInfo.title}</strong><br>
-              <img src="${story.photoUrl}" alt="${displayInfo.title}" style="width:100%;height:auto;margin:5px 0;border-radius:4px;">
-              <p style="margin:8px 0;">${displayInfo.description.substring(0, 100)}${displayInfo.description.length > 100 ? "..." : ""}</p>
-              <small style="color:#666;">Lokasi: ${story.lat}, ${story.lon}</small>
+              <img src="${story.photoUrl}" alt="${
+            displayInfo.title
+          }" style="width:100%;height:auto;margin:5px 0;border-radius:4px;">
+              <p style="margin:8px 0;">${displayInfo.description.substring(
+                0,
+                100
+              )}${displayInfo.description.length > 100 ? "..." : ""}</p>
+              <small style="color:#666;">Lokasi: ${story.lat}, ${
+            story.lon
+          }</small>
             </div>
           `);
 
           this._markers.push({
             storyId: story.id,
-            marker: marker
+            marker: marker,
           });
         } catch (markerError) {
-          console.error(`Error adding marker for story ${story.id}:`, markerError);
+          console.error(
+            `Error adding marker for story ${story.id}:`,
+            markerError
+          );
         }
       }
     });
 
-    // Fit map bounds if there are markers
     if (this._markers.length > 0 && this._map) {
-      const group = new L.featureGroup(this._markers.map(m => m.marker));
+      const group = new L.featureGroup(this._markers.map((m) => m.marker));
       this._map.fitBounds(group.getBounds().pad(0.1));
     }
   },
 
   cleanup() {
+    console.log("HomePage: Cleaning up...");
     if (this._map) {
       this._map.remove();
       this._map = null;
     }
+    this._markers.forEach((marker) => {
+      if (marker.marker) {
+        marker.marker.remove();
+      }
+    });
     this._markers = [];
     this._stories = [];
     this._filteredStories = [];
-  }
+  },
 };
 
 export default HomePage;

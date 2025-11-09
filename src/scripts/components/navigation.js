@@ -5,6 +5,7 @@ class Navigation {
   constructor() {
     this.navElement = null;
     this.updateNavigation = this.updateNavigation.bind(this);
+    this._isPushManagerInitialized = false;
   }
 
   async init() {
@@ -16,7 +17,23 @@ class Navigation {
     // Initialize push manager jika user sudah login
     if (authService.isLoggedIn()) {
       console.log("Navigation: Initializing push manager...");
+
+      // Init push manager tanpa blocking
+      this._initializePushManager();
+    }
+  }
+
+  async _initializePushManager() {
+    try {
       await pushManager.init();
+      this._isPushManagerInitialized = true;
+      console.log("Navigation: Push manager initialized successfully");
+
+      // Update UI setelah init selesai
+      this._updateNotificationUI();
+    } catch (error) {
+      console.error("Navigation: Failed to initialize push manager:", error);
+      this._isPushManagerInitialized = false;
     }
   }
 
@@ -52,8 +69,10 @@ class Navigation {
         logoutBtn.addEventListener("click", this.handleLogout.bind(this));
       }
 
-      // Setup notification controls
-      this._setupNotificationControls();
+      // Setup notification controls dengan delay untuk pastikan push manager ready
+      setTimeout(() => {
+        this._setupNotificationControls();
+      }, 1000);
     } else {
       this.navElement.innerHTML = `
         <li><a href="#/about" class="nav-link">About</a></li>
@@ -70,27 +89,79 @@ class Navigation {
     const disableBtn = document.getElementById("disable-notifications");
 
     if (enableBtn && disableBtn) {
-      // Update UI berdasarkan status subscription
       this._updateNotificationUI();
 
       enableBtn.addEventListener("click", async () => {
         console.log("Enable notifications clicked");
+
+        if (!this._isPushManagerInitialized) {
+          console.log("Push manager not ready, initializing...");
+          await pushManager.init();
+          this._isPushManagerInitialized = true;
+        }
+
         const success = await pushManager.subscribe();
         if (success) {
           this._updateNotificationUI();
+          this._showNotificationMessage(
+            "Notifikasi berhasil diaktifkan",
+            "success"
+          );
+        } else {
+          this._showNotificationMessage(
+            "Gagal mengaktifkan notifikasi",
+            "error"
+          );
         }
       });
 
       disableBtn.addEventListener("click", async () => {
         console.log("Disable notifications clicked");
+
+        if (!this._isPushManagerInitialized) {
+          console.log("Push manager not ready, initializing...");
+          await pushManager.init();
+          this._isPushManagerInitialized = true;
+        }
+
         const success = await pushManager.unsubscribe();
         if (success) {
           this._updateNotificationUI();
+          this._showNotificationMessage(
+            "Notifikasi berhasil dimatikan",
+            "success"
+          );
+        } else {
+          this._showNotificationMessage("Gagal mematikan notifikasi", "error");
         }
       });
     }
 
     console.log("Navigation: Notification controls setup complete");
+  }
+
+  _showNotificationMessage(message, type) {
+    // Buat temporary message element
+    const messageElement = document.createElement("div");
+    messageElement.textContent = message;
+    messageElement.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    background: ${type === "success" ? "#4CAF50" : "#f44336"};
+    color: white;
+    border-radius: 4px;
+    z-index: 10000;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  `;
+
+    document.body.appendChild(messageElement);
+    setTimeout(() => {
+      if (messageElement.parentNode) {
+        messageElement.parentNode.removeChild(messageElement);
+      }
+    }, 3000);
   }
 
   _updateNotificationUI() {

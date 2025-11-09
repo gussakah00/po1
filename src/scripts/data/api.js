@@ -58,7 +58,7 @@ export async function fetchStoriesWithToken() {
 }
 
 export async function postStory({ description, photo, lat, lon }) {
-  const token = getAuthToken();
+  const token = authService.getToken();
 
   if (!token) {
     return {
@@ -67,45 +67,56 @@ export async function postStory({ description, photo, lat, lon }) {
     };
   }
 
-  if (!description || !photo) {
-    return {
-      error: true,
-      message: "Deskripsi dan foto harus diisi.",
-    };
-  }
-
   const formData = new FormData();
   formData.append("description", description);
   formData.append("photo", photo);
-
   if (lat) formData.append("lat", lat);
   if (lon) formData.append("lon", lon);
 
   try {
+    console.log("🔍 DEBUG - Mulai mengirim cerita ke API...");
+
     const response = await fetch(`${API_BASE}/stories`, {
       method: "POST",
       body: formData,
       headers: {
         Authorization: `Bearer ${token}`,
+        // JANGAN tambahkan Content-Type untuk FormData, browser akan set otomatis dengan boundary
       },
     });
 
+    console.log("🔍 DEBUG - Response status:", response.status);
+
     const json = await response.json();
+    console.log("🔍 DEBUG - Response data:", json);
 
     if (!response.ok || json.error) {
-      console.error("API Error while posting story:", json.message);
       return {
         error: true,
-        message: json.message || `Status ${response.status}`,
+        message:
+          json.message || `Error ${response.status}: ${response.statusText}`,
       };
     }
 
+    console.log("🔍 DEBUG - Cerita berhasil dikirim:", json);
     return json;
   } catch (error) {
-    console.error("Post Network Error:", error);
+    console.error("🔍 DEBUG - Error detail:", error);
+
+    // Berikan pesan error yang lebih spesifik
+    if (
+      error.name === "TypeError" &&
+      error.message.includes("Failed to fetch")
+    ) {
+      return {
+        error: true,
+        message: "Gagal terhubung ke server. Periksa koneksi internet Anda.",
+      };
+    }
+
     return {
       error: true,
-      message: "Gagal mengirim data karena masalah jaringan.",
+      message: `Gagal mengirim data: ${error.message}`,
     };
   }
 }

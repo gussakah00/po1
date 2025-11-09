@@ -1,6 +1,6 @@
 class IDBManager {
   constructor() {
-    this.dbName = 'CeritaDatabase';
+    this.dbName = "CeritaDatabase";
     this.version = 2;
     this.db = null;
   }
@@ -19,26 +19,30 @@ class IDBManager {
         const db = event.target.result;
 
         // Store untuk stories dari API
-        if (!db.objectStoreNames.contains('stories')) {
-          const storyStore = db.createObjectStore('stories', { keyPath: 'id' });
-          storyStore.createIndex('createdAt', 'createdAt', { unique: false });
-          storyStore.createIndex('hasLocation', 'hasLocation', { unique: false });
+        if (!db.objectStoreNames.contains("stories")) {
+          const storyStore = db.createObjectStore("stories", { keyPath: "id" });
+          storyStore.createIndex("createdAt", "createdAt", { unique: false });
+          storyStore.createIndex("hasLocation", "hasLocation", {
+            unique: false,
+          });
         }
 
         // Store untuk stories offline
-        if (!db.objectStoreNames.contains('offlineStories')) {
-          const offlineStore = db.createObjectStore('offlineStories', { 
-            keyPath: 'id',
-            autoIncrement: true 
+        if (!db.objectStoreNames.contains("offlineStories")) {
+          const offlineStore = db.createObjectStore("offlineStories", {
+            keyPath: "id",
+            autoIncrement: true,
           });
-          offlineStore.createIndex('createdAt', 'createdAt', { unique: false });
-          offlineStore.createIndex('synced', 'synced', { unique: false });
+          offlineStore.createIndex("createdAt", "createdAt", { unique: false });
+          offlineStore.createIndex("synced", "synced", { unique: false });
         }
 
         // Store untuk favorites
-        if (!db.objectStoreNames.contains('favorites')) {
-          const favoriteStore = db.createObjectStore('favorites', { keyPath: 'storyId' });
-          favoriteStore.createIndex('addedAt', 'addedAt', { unique: false });
+        if (!db.objectStoreNames.contains("favorites")) {
+          const favoriteStore = db.createObjectStore("favorites", {
+            keyPath: "storyId",
+          });
+          favoriteStore.createIndex("addedAt", "addedAt", { unique: false });
         }
       };
     });
@@ -47,15 +51,15 @@ class IDBManager {
   // CRUD Operations untuk Stories
   async saveStories(stories) {
     if (!this.db) await this.init();
-    
-    const transaction = this.db.transaction(['stories'], 'readwrite');
-    const store = transaction.objectStore('stories');
 
-    stories.forEach(story => {
+    const transaction = this.db.transaction(["stories"], "readwrite");
+    const store = transaction.objectStore("stories");
+
+    stories.forEach((story) => {
       store.put({
         ...story,
         hasLocation: !!(story.lat && story.lon),
-        cachedAt: new Date().toISOString()
+        cachedAt: new Date().toISOString(),
       });
     });
 
@@ -66,10 +70,10 @@ class IDBManager {
 
   async getStories() {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['stories'], 'readonly');
-      const store = transaction.objectStore('stories');
+      const transaction = this.db.transaction(["stories"], "readonly");
+      const store = transaction.objectStore("stories");
       const request = store.getAll();
 
       request.onsuccess = () => resolve(request.result);
@@ -79,10 +83,10 @@ class IDBManager {
 
   async deleteStory(storyId) {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['stories'], 'readwrite');
-      const store = transaction.objectStore('stories');
+      const transaction = this.db.transaction(["stories"], "readwrite");
+      const store = transaction.objectStore("stories");
       const request = store.delete(storyId);
 
       request.onsuccess = () => resolve();
@@ -93,16 +97,16 @@ class IDBManager {
   // Offline Stories Management
   async saveOfflineStory(storyData) {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['offlineStories'], 'readwrite');
-      const store = transaction.objectStore('offlineStories');
-      
+      const transaction = this.db.transaction(["offlineStories"], "readwrite");
+      const store = transaction.objectStore("offlineStories");
+
       const offlineStory = {
         ...storyData,
         id: Date.now(),
         createdAt: new Date().toISOString(),
-        synced: false
+        synced: false,
       };
 
       const request = store.add(offlineStory);
@@ -114,10 +118,10 @@ class IDBManager {
 
   async getOfflineStories() {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['offlineStories'], 'readonly');
-      const store = transaction.objectStore('offlineStories');
+      const transaction = this.db.transaction(["offlineStories"], "readonly");
+      const store = transaction.objectStore("offlineStories");
       const request = store.getAll();
 
       request.onsuccess = () => resolve(request.result);
@@ -127,10 +131,10 @@ class IDBManager {
 
   async deleteOfflineStory(storyId) {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['offlineStories'], 'readwrite');
-      const store = transaction.objectStore('offlineStories');
+      const transaction = this.db.transaction(["offlineStories"], "readwrite");
+      const store = transaction.objectStore("offlineStories");
       const request = store.delete(storyId);
 
       request.onsuccess = () => resolve();
@@ -141,15 +145,15 @@ class IDBManager {
   // Favorites Management
   async addFavorite(storyId, storyData) {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['favorites'], 'readwrite');
-      const store = transaction.objectStore('favorites');
-      
+      const transaction = this.db.transaction(["favorites"], "readwrite");
+      const store = transaction.objectStore("favorites");
+
       const favorite = {
         storyId,
         ...storyData,
-        addedAt: new Date().toISOString()
+        addedAt: new Date().toISOString(),
       };
 
       const request = store.add(favorite);
@@ -161,10 +165,10 @@ class IDBManager {
 
   async removeFavorite(storyId) {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['favorites'], 'readwrite');
-      const store = transaction.objectStore('favorites');
+      const transaction = this.db.transaction(["favorites"], "readwrite");
+      const store = transaction.objectStore("favorites");
       const request = store.delete(storyId);
 
       request.onsuccess = () => resolve();
@@ -174,10 +178,10 @@ class IDBManager {
 
   async getFavorites() {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['favorites'], 'readonly');
-      const store = transaction.objectStore('favorites');
+      const transaction = this.db.transaction(["favorites"], "readonly");
+      const store = transaction.objectStore("favorites");
       const request = store.getAll();
 
       request.onsuccess = () => resolve(request.result);
@@ -187,10 +191,10 @@ class IDBManager {
 
   async isFavorite(storyId) {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['favorites'], 'readonly');
-      const store = transaction.objectStore('favorites');
+      const transaction = this.db.transaction(["favorites"], "readonly");
+      const store = transaction.objectStore("favorites");
       const request = store.get(storyId);
 
       request.onsuccess = () => resolve(!!request.result);
@@ -198,63 +202,120 @@ class IDBManager {
     });
   }
 
-  // Search and Filter
   async searchStories(query) {
     const stories = await this.getStories();
-    return stories.filter(story => 
-      story.name.toLowerCase().includes(query.toLowerCase()) ||
-      story.description.toLowerCase().includes(query.toLowerCase())
+    const searchTerm = query.toLowerCase();
+
+    return stories.filter(
+      (story) =>
+        story.name?.toLowerCase().includes(searchTerm) ||
+        story.description?.toLowerCase().includes(searchTerm) ||
+        (story.lat && story.lon && `lokasi peta`.includes(searchTerm))
     );
   }
 
-  async filterStoriesByLocation(hasLocation) {
-    const stories = await this.getStories();
-    return stories.filter(story => 
-      hasLocation ? story.hasLocation : !story.hasLocation
-    );
+  // Advanced filtering
+  async filterStories(filters = {}) {
+    let stories = await this.getStories();
+
+    if (filters.hasLocation) {
+      stories = stories.filter((story) => story.lat && story.lon);
+    }
+
+    if (filters.dateRange) {
+      stories = stories.filter((story) => {
+        const storyDate = new Date(story.createdAt);
+        return (
+          storyDate >= filters.dateRange.start &&
+          storyDate <= filters.dateRange.end
+        );
+      });
+    }
+
+    if (filters.favoritesOnly) {
+      const favorites = await this.getFavorites();
+      const favoriteIds = favorites.map((fav) => fav.storyId);
+      stories = stories.filter((story) => favoriteIds.includes(story.id));
+    }
+
+    return stories;
   }
 
-  async sortStories(sortBy = 'createdAt', order = 'desc') {
+  // Advanced sorting
+  async sortStories(
+    sortBy = "createdAt",
+    order = "desc",
+    secondarySort = null
+  ) {
     const stories = await this.getStories();
+
     return stories.sort((a, b) => {
-      const aVal = a[sortBy];
-      const bVal = b[sortBy];
-      
-      if (order === 'desc') {
-        return new Date(bVal) - new Date(aVal);
-      } else {
-        return new Date(aVal) - new Date(bVal);
+      let aVal = a[sortBy];
+      let bVal = b[sortBy];
+
+      // Handle different data types
+      if (sortBy === "createdAt") {
+        aVal = new Date(aVal);
+        bVal = new Date(bVal);
       }
+
+      let primaryResult = 0;
+      if (order === "desc") {
+        primaryResult = bVal - aVal;
+      } else {
+        primaryResult = aVal - bVal;
+      }
+
+      // Secondary sort jika diperlukan
+      if (primaryResult === 0 && secondarySort) {
+        const aSec = a[secondarySort.field];
+        const bSec = b[secondarySort.field];
+        return secondarySort.order === "desc" ? bSec - aSec : aSec - bSec;
+      }
+
+      return primaryResult;
     });
   }
 
-  // Sync Management
-  async markOfflineStoryAsSynced(storyId) {
-    if (!this.db) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['offlineStories'], 'readwrite');
-      const store = transaction.objectStore('offlineStories');
-      
-      const getRequest = store.get(storyId);
-      getRequest.onsuccess = () => {
-        const story = getRequest.result;
-        if (story) {
-          story.synced = true;
-          const updateRequest = store.put(story);
-          updateRequest.onsuccess = () => resolve();
-          updateRequest.onerror = () => reject(updateRequest.error);
-        } else {
-          resolve();
-        }
-      };
-      getRequest.onerror = () => reject(getRequest.error);
-    });
-  }
-
-  async getUnsyncedStories() {
+  // Offline sync functionality
+  async syncOfflineStories() {
     const offlineStories = await this.getOfflineStories();
-    return offlineStories.filter(story => !story.synced);
+    const unsyncedStories = offlineStories.filter((story) => !story.synced);
+
+    const syncResults = {
+      successful: [],
+      failed: [],
+    };
+
+    for (const story of unsyncedStories) {
+      try {
+        // Simulate API call untuk sync
+        await this._syncStoryToAPI(story);
+        await this.markOfflineStoryAsSynced(story.id);
+        syncResults.successful.push(story.id);
+      } catch (error) {
+        syncResults.failed.push({
+          id: story.id,
+          error: error.message,
+        });
+      }
+    }
+
+    return syncResults;
+  }
+
+  async _syncStoryToAPI(story) {
+    // Simulasi API call untuk sync
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (Math.random() > 0.2) {
+          // 80% success rate untuk simulasi
+          resolve({ success: true, id: story.id });
+        } else {
+          reject(new Error("Sync failed"));
+        }
+      }, 1000);
+    });
   }
 }
 

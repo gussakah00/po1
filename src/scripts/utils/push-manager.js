@@ -5,73 +5,99 @@ class PushManager {
     this.subscription = null;
     this.VAPID_PUBLIC_KEY =
       "BCCs2eonMI-6H2ctvFaWg-UYdDv387Vno_bzUzALpB442r2lCnsHmtrx8biyPi_E-1fSGABK_Qs_GlvPoJJqxbk";
-    this.API_BASE = "https://story-api.dicoding.dev/v1";
+    this._isInitialized = false;
+    this._initPromise = null;
   }
 
   async init() {
     console.log("PushManager: Initializing...");
 
-    if (!("serviceWorker" in navigator)) {
-      console.log("PushManager: Service Worker not supported");
-      return false;
+    if (this._initPromise) {
+      return this._initPromise;
     }
 
-    if (!("PushManager" in window)) {
-      console.log("PushManager: Push notifications not supported");
-      return false;
-    }
+    this._initPromise = new Promise(async (resolve, reject) => {
+      if (!this._isSupported()) {
+        console.log("PushManager: Not supported");
+        this._isInitialized = true;
+        resolve(false);
+        return;
+      }
 
-    try {
-      this.registration = await navigator.serviceWorker.ready;
-      console.log("PushManager: Service Worker ready");
+      try {
+        this.registration = await navigator.serviceWorker.ready;
+        console.log("PushManager: Service Worker ready");
 
-      this.subscription = await this.registration.pushManager.getSubscription();
-      this.isSubscribed = !(this.subscription === null);
+        this.subscription =
+          await this.registration.pushManager.getSubscription();
+        this.isSubscribed = !(this.subscription === null);
 
-      console.log("PushManager: Subscription status:", this.isSubscribed);
-      return true;
-    } catch (error) {
-      console.error("PushManager: Error initializing:", error);
-      return false;
-    }
+        this._isInitialized = true;
+        console.log("PushManager: Initialized, subscribed:", this.isSubscribed);
+        resolve(true);
+      } catch (error) {
+        console.error("PushManager: Init error:", error);
+        this._isInitialized = true;
+        resolve(false);
+      }
+    });
+
+    return this._initPromise;
+  }
+
+  _isSupported() {
+    return "serviceWorker" in navigator && "PushManager" in window;
   }
 
   async subscribe() {
-    console.log("PushManager: Starting subscription process...");
+    if (!this._isInitialized) {
+      await this.init();
+    }
 
     if (!this.registration) {
-      console.error("PushManager: Service Worker not ready");
-      return false;
+      throw new Error("Service Worker not ready");
     }
 
     try {
       const permission = await Notification.requestPermission();
-      console.log("PushManager: Permission result:", permission);
-
       if (permission !== "granted") {
-        throw new Error("Izin notifikasi tidak diberikan");
+        throw new Error("Izin notifikasi ditolak");
+      }
+
+      // Unsubscribe existing subscription first
+      if (this.subscription) {
+        await this.subscription.unsubscribe();
       }
 
       this.subscription = await this.registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(this.VAPID_PUBLIC_KEY),
+        applicationServerKey: this._urlBase64ToUint8Array(
+          this.VAPID_PUBLIC_KEY
+        ),
       });
-
-      console.log("PushManager: Subscription successful");
 
       this.isSubscribed = true;
 
-      this.showNotification(
-        "Notifikasi Diaktifkan",
+      console.log("PushManager: Subscription created:", this.subscription);
+
+      // Coba kirim ke server, tapi jangan block jika gagal
+      const serverResult = await this._sendSubscriptionToServer();
+      if (!serverResult.success) {
+        console.warn(
+          "PushManager: Server subscription failed, but local subscription created"
+        );
+      }
+
+      this._showLocalNotification(
+        "🔔 Notifikasi Diaktifkan",
         "Anda akan menerima notifikasi cerita baru."
       );
 
-      console.log("PushManager: Subscription completed successfully");
       return true;
     } catch (error) {
-      console.error("PushManager: Error subscribing:", error);
-      this.showNotification(
-        "Gagal",
+      console.error("PushManager: Subscribe error:", error);
+      this._showLocalNotification(
+        "❌ Gagal",
         "Tidak dapat mengaktifkan notifikasi: " + error.message
       );
       return false;
@@ -79,37 +105,185 @@ class PushManager {
   }
 
   async unsubscribe() {
-    console.log("PushManager: Starting unsubscribe process...");
-
     if (!this.subscription) {
-      console.log("PushManager: No subscription to unsubscribe");
       return true;
     }
 
     try {
       const success = await this.subscription.unsubscribe();
       if (!success) {
-        throw new Error("Gagal berhenti berlangganan");
+        throw new Error("Unsubscribe failed");
       }
 
       this.subscription = null;
       this.isSubscribed = false;
 
-      this.showNotification(
-        "Notifikasi Dinonaktifkan",
+      // Coba hapus dari server
+      const serverResult = await this._removeSubscriptionFromServer();
+      if (!serverResult.success) {
+        console.warn(
+          "PushManager: Server unsubscription failed, but local subscription removed"
+        );
+      }
+
+      this._showLocalNotification(
+        "🔕 Notifikasi Dimatikan",
         "Anda tidak akan menerima notifikasi lagi."
       );
 
-      console.log("PushManager: Unsubscribe completed successfully");
       return true;
     } catch (error) {
-      console.error("PushManager: Error unsubscribing:", error);
-      this.showNotification("Gagal", "Tidak dapat menonaktifkan notifikasi.");
+      console.error("PushManager: Unsubscribe error:", error);
+      this._showLocalNotification(
+        "⚠️ Peringatan",
+        "Notifikasi dimatikan secara lokal, tetapi mungkin masih aktif di server."
+      );
       return false;
     }
   }
 
-  urlBase64ToUint8Array(base64String) {
+  async _sendSubscriptionToServer() {
+    if (!this.subscription) {
+      return { success: false, error: "No subscription" };
+    }
+
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      console.log("PushManager: No auth token, skipping server registration");
+      return { success: false, error: "No auth token" };
+    }
+
+    try {
+      const subscriptionJSON = this.subscription.toJSON();
+
+      // Pastikan format data sesuai dengan yang diharapkan server
+      const requestBody = {
+        endpoint: subscriptionJSON.endpoint,
+        keys: {
+          p256dh: subscriptionJSON.keys.p256dh,
+          auth: subscriptionJSON.keys.auth,
+        },
+      };
+
+      console.log("PushManager: Sending subscription to server:", requestBody);
+
+      const response = await fetch(
+        "https://story-api.dicoding.dev/v1/notifications/subscribe",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          "PushManager: Server returned error:",
+          response.status,
+          errorText
+        );
+
+        if (response.status === 400) {
+          return {
+            success: false,
+            error:
+              "Bad Request - Mungkin subscription sudah ada atau format salah",
+          };
+        } else if (response.status === 401) {
+          return {
+            success: false,
+            error: "Unauthorized - Token mungkin expired",
+          };
+        }
+
+        throw new Error(`Server returned ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("PushManager: Subscription saved on server:", result);
+      return { success: true, data: result };
+    } catch (error) {
+      console.warn(
+        "PushManager: Failed to save subscription on server:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  }
+
+  async _removeSubscriptionFromServer() {
+    if (!this.subscription) {
+      return { success: false, error: "No subscription" };
+    }
+
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      return { success: false, error: "No auth token" };
+    }
+
+    try {
+      const subscriptionJSON = this.subscription.toJSON();
+
+      const response = await fetch(
+        "https://story-api.dicoding.dev/v1/notifications/subscribe",
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            endpoint: subscriptionJSON.endpoint,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(
+          "PushManager: Server unsubscription failed:",
+          response.status,
+          errorText
+        );
+        return { success: false, error: `Server returned ${response.status}` };
+      }
+
+      console.log("PushManager: Subscription removed from server");
+      return { success: true };
+    } catch (error) {
+      console.warn(
+        "PushManager: Failed to remove subscription from server:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  }
+
+  _showLocalNotification(title, body) {
+    if ("Notification" in window && Notification.permission === "granted") {
+      try {
+        new Notification(title, {
+          body: body,
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-72x72.png",
+        });
+      } catch (error) {
+        console.log(
+          "PushManager: Could not show notification, using alert:",
+          error
+        );
+        alert(`${title}: ${body}`);
+      }
+    } else {
+      alert(`${title}: ${body}`);
+    }
+  }
+
+  _urlBase64ToUint8Array(base64String) {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding)
       .replace(/\-/g, "+")
@@ -124,36 +298,26 @@ class PushManager {
     return outputArray;
   }
 
-  showNotification(title, message) {
-    console.log("PushManager: Showing notification:", title, message);
-
-    if ("Notification" in window && Notification.permission === "granted") {
-      try {
-        const notification = new Notification(title, {
-          body: message,
-          icon: "/icons/icon-192x192.png",
-        });
-
-        notification.onclick = () => {
-          console.log("PushManager: Notification clicked");
-          window.focus();
-          notification.close();
-        };
-      } catch (error) {
-        console.error("PushManager: Error showing notification:", error);
-        alert(`${title}: ${message}`);
-      }
-    } else {
-      alert(`${title}: ${message}`);
-    }
-  }
-
   getStatus() {
     return {
       isSubscribed: this.isSubscribed,
-      isSupported: "serviceWorker" in navigator && "PushManager" in window,
+      isSupported: this._isSupported(),
       permission: Notification.permission,
+      isInitialized: this._isInitialized,
+      subscription: this.subscription ? this.subscription.toJSON() : null,
     };
+  }
+
+  // Method untuk debug
+  async debugSubscription() {
+    const status = this.getStatus();
+    console.log("PushManager Debug Info:", status);
+
+    if (this.subscription) {
+      console.log("Subscription Details:", this.subscription.toJSON());
+    }
+
+    return status;
   }
 }
 

@@ -9,6 +9,7 @@ const AddPage = {
   _longitude: null,
   _stream: null,
   _capturedBlob: null,
+  _isInitialized: false,
 
   _markIcon: L.icon({
     iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
@@ -47,7 +48,11 @@ const AddPage = {
               <h2>Pilih Lokasi Cerita</h2>
               <p class="form-help">Klik pada peta untuk memilih lokasi cerita Anda (opsional)</p>
               <div id="map-picker" style="height: 300px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #ddd;" 
-                   aria-label="Peta untuk memilih lokasi cerita"></div>
+                   aria-label="Peta untuk memilih lokasi cerita">
+                <div style="text-align: center; padding: 40px; color: #666;">
+                  <p>Memuat peta...</p>
+                </div>
+              </div>
               
               <div class="coordinates-display">
                 <div class="coordinate-field">
@@ -147,40 +152,104 @@ const AddPage = {
       return;
     }
 
-    this._initMap();
-    this._setupFormInteractivity();
-  },
+    // Reset initialization flag
+    this._isInitialized = false;
 
-  _initMap() {
+    // Tunggu DOM benar-benar siap
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
     try {
-      this._map = L.map("map-picker").setView([-6.2, 106.8], 5);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(this._map);
-
-      this._map.on("click", (e) => this._onMapClick(e));
-
-      this._marker = L.marker([-6.2, 106.8], { icon: this._markIcon })
-        .addTo(this._map)
-        .bindPopup("Lokasi default: Jakarta")
-        .openPopup();
-
-      this._latitude = "-6.200000";
-      this._longitude = "106.800000";
-      document.querySelector("#latitude").value = this._latitude;
-      document.querySelector("#longitude").value = this._longitude;
+      await this._initMap();
+      this._setupFormInteractivity();
+      this._isInitialized = true;
     } catch (error) {
-      console.error("Error initializing map:", error);
-      document.getElementById("map-picker").innerHTML = `
-        <div style="text-align: center; padding: 40px; color: #666;">
-          <p>Gagal memuat peta. Pastikan koneksi internet Anda stabil.</p>
-        </div>
-      `;
+      console.error("Error in afterRender:", error);
     }
   },
 
+  async _initMap() {
+    return new Promise((resolve, reject) => {
+      // Tunggu sebentar untuk memastikan DOM sudah di-render
+      setTimeout(() => {
+        try {
+          const mapContainer = document.getElementById("map-picker");
+
+          if (!mapContainer) {
+            console.error("Map container #map-picker not found");
+            reject(new Error("Map container not found"));
+            return;
+          }
+
+          // Check if Leaflet is available
+          if (typeof L === "undefined") {
+            console.error("Leaflet not loaded");
+            reject(new Error("Leaflet library not found"));
+            return;
+          }
+
+          // Clear previous map if exists
+          if (this._map) {
+            this._map.remove();
+            this._map = null;
+          }
+
+          // Initialize map
+          this._map = L.map("map-picker").setView([-6.2, 106.8], 5);
+
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution:
+              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          }).addTo(this._map);
+
+          this._map.on("click", (e) => this._onMapClick(e));
+
+          // Create marker
+          this._marker = L.marker([-6.2, 106.8], { icon: this._markIcon })
+            .addTo(this._map)
+            .bindPopup("Lokasi default: Jakarta")
+            .openPopup();
+
+          this._latitude = "-6.200000";
+          this._longitude = "106.800000";
+
+          // Set coordinate values with null check
+          const latInput = document.getElementById("latitude");
+          const lonInput = document.getElementById("longitude");
+
+          if (latInput) latInput.value = this._latitude;
+          if (lonInput) lonInput.value = this._longitude;
+
+          // Force map resize to ensure proper rendering
+          setTimeout(() => {
+            if (this._map) {
+              this._map.invalidateSize();
+            }
+          }, 100);
+
+          console.log("Map initialized successfully");
+          resolve();
+        } catch (error) {
+          console.error("Error initializing map:", error);
+
+          // Safe error display
+          const mapContainer = document.getElementById("map-picker");
+          if (mapContainer) {
+            mapContainer.innerHTML = `
+              <div style="text-align: center; padding: 40px; color: #666;">
+                <p>Gagal memuat peta. Pastikan koneksi internet Anda stabil.</p>
+                <p style="font-size: 12px; margin-top: 10px;">Error: ${error.message}</p>
+              </div>
+            `;
+          }
+          reject(error);
+        }
+      }, 100);
+    });
+  },
+
   _onMapClick(e) {
+    if (!this._map || !this._marker) return;
+
     if (this._marker) {
       this._map.removeLayer(this._marker);
     }
@@ -195,242 +264,300 @@ const AddPage = {
       .bindPopup(`Lokasi terpilih: ${this._latitude}, ${this._longitude}`)
       .openPopup();
 
-    document.querySelector("#latitude").value = this._latitude;
-    document.querySelector("#longitude").value = this._longitude;
+    // Safe DOM updates
+    const latInput = document.getElementById("latitude");
+    const lonInput = document.getElementById("longitude");
+
+    if (latInput) latInput.value = this._latitude;
+    if (lonInput) lonInput.value = this._longitude;
   },
 
   _setupFormInteractivity() {
-    const form = document.querySelector("#addStoryForm");
-    const photoTypeSelect = document.querySelector("#photoType");
-    const fileUploadContainer = document.querySelector("#fileUploadContainer");
-    const cameraContainer = document.querySelector("#cameraContainer");
-    const videoElement = document.querySelector("#videoElement");
-    const canvasElement = document.querySelector("#canvasElement");
-    const captureButton = document.querySelector("#captureButton");
-    const retakeButton = document.querySelector("#retakeButton");
-    const filePreview = document.querySelector("#filePreview");
-    const filePreviewImage = document.querySelector("#filePreviewImage");
-    const capturedImagePreview = document.querySelector(
-      "#capturedImagePreview"
-    );
-    const capturedPreviewImage = document.querySelector(
-      "#capturedPreviewImage"
-    );
-    const photoInput = document.querySelector("#photo");
-    const messageDisplay = document.querySelector("#form-message");
-    const cancelButton = document.querySelector("#cancelButton");
-
-    let capturedBlob = null;
-
-    const closeMediaStream = () => {
-      if (this._stream) {
-        this._stream.getTracks().forEach((track) => track.stop());
-        this._stream = null;
-        videoElement.srcObject = null;
+    // Tunggu sebentar untuk memastikan DOM tersedia
+    setTimeout(() => {
+      const form = document.getElementById("addStoryForm");
+      if (!form) {
+        console.error("Form not found");
+        return;
       }
-    };
 
-    photoInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        if (file.size > 5 * 1024 * 1024) {
-          messageDisplay.textContent =
-            "Ukuran file terlalu besar. Maksimal 5MB.";
-          messageDisplay.style.backgroundColor = "#fee";
-          messageDisplay.style.display = "block";
-          photoInput.value = "";
-          return;
+      const photoTypeSelect = document.getElementById("photoType");
+      const fileUploadContainer = document.getElementById(
+        "fileUploadContainer"
+      );
+      const cameraContainer = document.getElementById("cameraContainer");
+      const videoElement = document.getElementById("videoElement");
+      const canvasElement = document.getElementById("canvasElement");
+      const captureButton = document.getElementById("captureButton");
+      const retakeButton = document.getElementById("retakeButton");
+      const filePreview = document.getElementById("filePreview");
+      const filePreviewImage = document.getElementById("filePreviewImage");
+      const capturedImagePreview = document.getElementById(
+        "capturedImagePreview"
+      );
+      const capturedPreviewImage = document.getElementById(
+        "capturedPreviewImage"
+      );
+      const photoInput = document.getElementById("photo");
+      const messageDisplay = document.getElementById("form-message");
+      const cancelButton = document.getElementById("cancelButton");
+
+      // Null check semua elements
+      if (
+        !photoTypeSelect ||
+        !fileUploadContainer ||
+        !cameraContainer ||
+        !videoElement ||
+        !canvasElement ||
+        !captureButton ||
+        !retakeButton ||
+        !filePreview ||
+        !filePreviewImage ||
+        !capturedImagePreview ||
+        !capturedPreviewImage ||
+        !photoInput ||
+        !messageDisplay ||
+        !cancelButton
+      ) {
+        console.error("Some form elements not found");
+        return;
+      }
+
+      let capturedBlob = null;
+
+      const closeMediaStream = () => {
+        if (this._stream) {
+          this._stream.getTracks().forEach((track) => track.stop());
+          this._stream = null;
+          videoElement.srcObject = null;
         }
+      };
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          filePreviewImage.src = e.target.result;
-          filePreview.style.display = "block";
-        };
-        reader.readAsDataURL(file);
-      }
-    });
+      photoInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          if (file.size > 5 * 1024 * 1024) {
+            messageDisplay.textContent =
+              "Ukuran file terlalu besar. Maksimal 5MB.";
+            messageDisplay.style.backgroundColor = "#fee";
+            messageDisplay.style.display = "block";
+            photoInput.value = "";
+            return;
+          }
 
-    photoTypeSelect.addEventListener("change", async (e) => {
-      const type = e.target.value;
-      capturedBlob = null;
-      capturedImagePreview.style.display = "none";
-      filePreview.style.display = "none";
-      photoInput.required = type === "file";
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            filePreviewImage.src = e.target.result;
+            filePreview.style.display = "block";
+          };
+          reader.readAsDataURL(file);
+        }
+      });
 
-      if (type === "camera") {
-        fileUploadContainer.style.display = "none";
-        cameraContainer.style.display = "block";
+      photoTypeSelect.addEventListener("change", async (e) => {
+        const type = e.target.value;
+        capturedBlob = null;
+        capturedImagePreview.style.display = "none";
+        filePreview.style.display = "none";
+        photoInput.required = type === "file";
+
+        if (type === "camera") {
+          fileUploadContainer.style.display = "none";
+          cameraContainer.style.display = "block";
+          retakeButton.style.display = "none";
+          captureButton.style.display = "block";
+
+          try {
+            this._stream = await navigator.mediaDevices.getUserMedia({
+              video: { width: 320, height: 240 },
+            });
+            videoElement.srcObject = this._stream;
+            const cameraStatus = document.getElementById("camera-status");
+            if (cameraStatus) {
+              cameraStatus.textContent = "Kamera aktif. Silakan ambil foto.";
+              cameraStatus.style.display = "block";
+              cameraStatus.style.backgroundColor = "#e8f5e8";
+            }
+          } catch (err) {
+            console.error("Gagal mengakses kamera: ", err);
+            const cameraStatus = document.getElementById("camera-status");
+            if (cameraStatus) {
+              cameraStatus.textContent =
+                "Gagal mengakses kamera. Periksa izin perangkat Anda.";
+              cameraStatus.style.backgroundColor = "#fee";
+              cameraStatus.style.display = "block";
+            }
+            closeMediaStream();
+          }
+        } else {
+          closeMediaStream();
+          cameraContainer.style.display = "none";
+          fileUploadContainer.style.display = "block";
+          const cameraStatus = document.getElementById("camera-status");
+          if (cameraStatus) cameraStatus.style.display = "none";
+        }
+      });
+
+      captureButton.addEventListener("click", () => {
+        if (this._stream) {
+          const context = canvasElement.getContext("2d");
+          canvasElement.width = videoElement.videoWidth;
+          canvasElement.height = videoElement.videoHeight;
+          context.drawImage(
+            videoElement,
+            0,
+            0,
+            canvasElement.width,
+            canvasElement.height
+          );
+
+          canvasElement.toBlob((blob) => {
+            capturedBlob = new File([blob], "story-photo.png", {
+              type: "image/png",
+            });
+            this._capturedBlob = capturedBlob;
+            capturedPreviewImage.src = URL.createObjectURL(blob);
+            capturedImagePreview.style.display = "block";
+            retakeButton.style.display = "block";
+            captureButton.style.display = "none";
+
+            const cameraStatus = document.getElementById("camera-status");
+            if (cameraStatus) {
+              cameraStatus.textContent = "Foto berhasil diambil!";
+              cameraStatus.style.backgroundColor = "#e8f5e8";
+            }
+
+            closeMediaStream();
+          }, "image/png");
+        }
+      });
+
+      retakeButton.addEventListener("click", async () => {
+        capturedImagePreview.style.display = "none";
         retakeButton.style.display = "none";
         captureButton.style.display = "block";
+        capturedBlob = null;
+        this._capturedBlob = null;
 
         try {
           this._stream = await navigator.mediaDevices.getUserMedia({
             video: { width: 320, height: 240 },
           });
           videoElement.srcObject = this._stream;
-          document.querySelector("#camera-status").textContent =
-            "Kamera aktif. Silakan ambil foto.";
-          document.querySelector("#camera-status").style.display = "block";
-          document.querySelector("#camera-status").style.backgroundColor =
-            "#e8f5e8";
+          const cameraStatus = document.getElementById("camera-status");
+          if (cameraStatus) {
+            cameraStatus.textContent = "Kamera aktif. Silakan ambil foto.";
+            cameraStatus.style.backgroundColor = "#e8f5e8";
+          }
         } catch (err) {
           console.error("Gagal mengakses kamera: ", err);
-          document.querySelector("#camera-status").textContent =
-            "Gagal mengakses kamera. Periksa izin perangkat Anda.";
-          document.querySelector("#camera-status").style.backgroundColor =
-            "#fee";
-          document.querySelector("#camera-status").style.display = "block";
-          closeMediaStream();
+          const cameraStatus = document.getElementById("camera-status");
+          if (cameraStatus) {
+            cameraStatus.textContent = "Gagal mengakses kamera.";
+            cameraStatus.style.backgroundColor = "#fee";
+          }
         }
-      } else {
-        closeMediaStream();
-        cameraContainer.style.display = "none";
-        fileUploadContainer.style.display = "block";
-        document.querySelector("#camera-status").style.display = "none";
-      }
-    });
+      });
 
-    captureButton.addEventListener("click", () => {
-      if (this._stream) {
-        const context = canvasElement.getContext("2d");
-        canvasElement.width = videoElement.videoWidth;
-        canvasElement.height = videoElement.videoHeight;
-        context.drawImage(
-          videoElement,
-          0,
-          0,
-          canvasElement.width,
-          canvasElement.height
-        );
-
-        canvasElement.toBlob((blob) => {
-          capturedBlob = new File([blob], "story-photo.png", {
-            type: "image/png",
-          });
-          this._capturedBlob = capturedBlob;
-          capturedPreviewImage.src = URL.createObjectURL(blob);
-          capturedImagePreview.style.display = "block";
-          retakeButton.style.display = "block";
-          captureButton.style.display = "none";
-          document.querySelector("#camera-status").textContent =
-            "Foto berhasil diambil!";
-          document.querySelector("#camera-status").style.backgroundColor =
-            "#e8f5e8";
-
+      cancelButton.addEventListener("click", () => {
+        if (
+          confirm(
+            "Apakah Anda yakin ingin membatalkan? Data yang sudah diisi akan hilang."
+          )
+        ) {
           closeMediaStream();
-        }, "image/png");
-      }
-    });
-
-    retakeButton.addEventListener("click", async () => {
-      capturedImagePreview.style.display = "none";
-      retakeButton.style.display = "none";
-      captureButton.style.display = "block";
-      capturedBlob = null;
-      this._capturedBlob = null;
-
-      try {
-        this._stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 320, height: 240 },
-        });
-        videoElement.srcObject = this._stream;
-        document.querySelector("#camera-status").textContent =
-          "Kamera aktif. Silakan ambil foto.";
-        document.querySelector("#camera-status").style.backgroundColor =
-          "#e8f5e8";
-      } catch (err) {
-        console.error("Gagal mengakses kamera: ", err);
-        document.querySelector("#camera-status").textContent =
-          "Gagal mengakses kamera.";
-        document.querySelector("#camera-status").style.backgroundColor = "#fee";
-      }
-    });
-
-    cancelButton.addEventListener("click", () => {
-      if (
-        confirm(
-          "Apakah Anda yakin ingin membatalkan? Data yang sudah diisi akan hilang."
-        )
-      ) {
-        closeMediaStream();
-        window.location.hash = "#/beranda";
-      }
-    });
-
-    window.addEventListener("hashchange", closeMediaStream);
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      messageDisplay.style.display = "none";
-
-      const isFormValid = this._validateForm(form);
-
-      if (!isFormValid) {
-        messageDisplay.textContent =
-          "Mohon periksa input Anda. Pastikan semua field wajib diisi dengan benar.";
-        messageDisplay.style.backgroundColor = "#fee";
-        messageDisplay.style.display = "block";
-        return;
-      }
-
-      const formData = new FormData(form);
-      let photoFile = null;
-
-      if (photoTypeSelect.value === "camera" && this._capturedBlob) {
-        photoFile = this._capturedBlob;
-      } else if (photoTypeSelect.value === "file" && photoInput.files[0]) {
-        photoFile = photoInput.files[0];
-      } else {
-        messageDisplay.textContent = "Mohon pilih atau ambil foto.";
-        messageDisplay.style.backgroundColor = "#fee";
-        messageDisplay.style.display = "block";
-        return;
-      }
-
-      const title = formData.get("title").trim();
-      const description = formData.get("description").trim();
-
-      const combinedDescription = `**${title}**\n${description}`;
-
-      const dataToSend = {
-        description: combinedDescription,
-        photo: photoFile,
-        lat: this._latitude ? parseFloat(this._latitude) : null,
-        lon: this._longitude ? parseFloat(this._longitude) : null,
-      };
-
-      const submitButton = document.querySelector("#submitButton");
-      submitButton.disabled = true;
-      submitButton.innerHTML = "Mengirim...";
-      messageDisplay.textContent = "Mengirim cerita Anda...";
-      messageDisplay.style.backgroundColor = "#e3f2fd";
-      messageDisplay.style.display = "block";
-
-      try {
-        const response = await postStory(dataToSend);
-
-        if (response.error) {
-          throw new Error(response.message || "Gagal mengirim data ke API.");
-        }
-
-        messageDisplay.textContent =
-          "Cerita berhasil ditambahkan! Mengarahkan ke Beranda...";
-        messageDisplay.style.backgroundColor = "#e8f5e8";
-
-        closeMediaStream();
-
-        setTimeout(() => {
           window.location.hash = "#/beranda";
-        }, 2000);
-      } catch (error) {
-        console.error("Error posting story:", error);
-        messageDisplay.textContent = `Gagal mengirim cerita: ${error.message}`;
-        messageDisplay.style.backgroundColor = "#fee";
-        submitButton.disabled = false;
-        submitButton.innerHTML = "Kirim Cerita";
-      }
-    });
+        }
+      });
+
+      // Store reference to closeMediaStream for cleanup
+      this._closeMediaStream = closeMediaStream;
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        messageDisplay.style.display = "none";
+
+        const isFormValid = this._validateForm(form);
+
+        if (!isFormValid) {
+          messageDisplay.textContent =
+            "Mohon periksa input Anda. Pastikan semua field wajib diisi dengan benar.";
+          messageDisplay.style.backgroundColor = "#fee";
+          messageDisplay.style.display = "block";
+          return;
+        }
+
+        const formData = new FormData(form);
+        let photoFile = null;
+
+        if (photoTypeSelect.value === "camera" && this._capturedBlob) {
+          photoFile = this._capturedBlob;
+        } else if (photoTypeSelect.value === "file" && photoInput.files[0]) {
+          photoFile = photoInput.files[0];
+        } else {
+          messageDisplay.textContent = "Mohon pilih atau ambil foto.";
+          messageDisplay.style.backgroundColor = "#fee";
+          messageDisplay.style.display = "block";
+          return;
+        }
+
+        // DEBUG: Log data yang akan dikirim
+        console.log("🔍 DEBUG - Data yang akan dikirim:", {
+          description: `**${formData.get("title").trim()}**\n${formData
+            .get("description")
+            .trim()}`,
+          photo: photoFile,
+          lat: this._latitude,
+          lon: this._longitude,
+          photoSize: photoFile.size,
+          photoType: photoFile.type,
+        });
+
+        const title = formData.get("title").trim();
+        const description = formData.get("description").trim();
+        const combinedDescription = `**${title}**\n${description}`;
+
+        const dataToSend = {
+          description: combinedDescription,
+          photo: photoFile,
+          lat: this._latitude ? parseFloat(this._latitude) : null,
+          lon: this._longitude ? parseFloat(this._longitude) : null,
+        };
+
+        const submitButton = document.getElementById("submitButton");
+        submitButton.disabled = true;
+        submitButton.innerHTML = "Mengirim...";
+        messageDisplay.textContent = "Mengirim cerita Anda...";
+        messageDisplay.style.backgroundColor = "#e3f2fd";
+        messageDisplay.style.display = "block";
+
+        try {
+          console.log("🔍 DEBUG - Memanggil postStory...");
+          const response = await postStory(dataToSend);
+          console.log("🔍 DEBUG - Response dari postStory:", response);
+
+          if (response.error) {
+            throw new Error(response.message || "Gagal mengirim data ke API.");
+          }
+
+          messageDisplay.textContent =
+            "Cerita berhasil ditambahkan! Mengarahkan ke Beranda...";
+          messageDisplay.style.backgroundColor = "#e8f5e8";
+
+          closeMediaStream();
+
+          setTimeout(() => {
+            window.location.hash = "#/beranda";
+          }, 2000);
+        } catch (error) {
+          console.error("Error posting story:", error);
+          messageDisplay.textContent = `Gagal mengirim cerita: ${error.message}`;
+          messageDisplay.style.backgroundColor = "#fee";
+          submitButton.disabled = false;
+          submitButton.innerHTML = "Kirim Cerita";
+        }
+      });
+    }, 100);
   },
 
   _validateForm(form) {
@@ -497,6 +624,36 @@ const AddPage = {
     }
 
     return isValid;
+  },
+
+  cleanup() {
+    console.log("AddPage: Cleaning up...");
+
+    // Hentikan media stream jika ada
+    if (this._stream) {
+      this._stream.getTracks().forEach((track) => track.stop());
+      this._stream = null;
+    }
+
+    // Hapus map jika ada
+    if (this._map) {
+      this._map.remove();
+      this._map = null;
+    }
+
+    // Hapus marker
+    this._marker = null;
+
+    // Hapus captured blob
+    this._capturedBlob = null;
+
+    // Reset initialization flag
+    this._isInitialized = false;
+
+    // Remove event listeners
+    if (this._closeMediaStream) {
+      window.removeEventListener("hashchange", this._closeMediaStream);
+    }
   },
 };
 
