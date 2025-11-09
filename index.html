@@ -1,353 +1,329 @@
-<!doctype html><html lang="id"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Cerita di Sekitarmu</title><link rel="manifest" href="app.webmanifest" crossorigin="use-credentials"/><meta name="theme-color" content="#1976d2"/><meta name="apple-mobile-web-app-status-bar-style" content="default"/><meta name="apple-mobile-web-app-capable" content="yes"/><meta name="mobile-web-app-capable" content="yes"/><meta name="apple-mobile-web-app-title" content="CeritaSekitar"/><link rel="icon" href="icons/icon-192x192.png" type="image/png"/><link rel="apple-touch-icon" href="icons/icon-192x192.png"/><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.css"/><style>/* Install Button Styles */
-      .install-button {
+<!doctype html><html lang="id"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Cerita di Sekitarmu</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin=""/><link rel="manifest" href="app.webmanifest" crossorigin="use-credentials"/><meta name="theme-color" content="#1976d2"/><meta name="apple-mobile-web-app-status-bar-style" content="default"/><meta name="apple-mobile-web-app-capable" content="yes"/><meta name="mobile-web-app-capable" content="yes"/><meta name="apple-mobile-web-app-title" content="CeritaSekitar"/><link rel="icon" href="icons/icon-192x192.png" type="image/png"/><link rel="apple-touch-icon" href="icons/icon-192x192.png"/><style>/* CSS Styles untuk aplikasi */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Arial", sans-serif;
+        line-height: 1.6;
+        background-color: #f5f5f5;
+      }
+
+      .container {
+        padding-inline: 32px;
+        margin-inline: auto;
+        max-width: 1300px;
+      }
+
+      header {
+        background-color: lightskyblue;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .main-header {
+        min-height: 90px;
+        padding-block: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 30px;
+      }
+
+      .brand-name {
+        font-size: 1.5rem;
+        font-weight: bold;
+        text-decoration: none;
+        color: #333;
+      }
+
+      .navigation-drawer {
+        min-height: 100vh;
+        width: 250px;
+        padding: 20px 10px;
+        background-color: #fff;
         position: fixed;
-        bottom: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        background: #1976d2;
+        top: 0;
+        left: 0;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 9999;
+      }
+
+      .navigation-drawer.open {
+        transform: translateX(0);
+      }
+
+      .drawer-button {
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        background-color: transparent;
+        font-weight: bold;
+        font-size: 24px;
+        color: #333;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      .drawer-button:hover {
+        background-color: rgba(0, 0, 0, 0.1);
+      }
+
+      .nav-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        margin-top: 20px;
+      }
+
+      .nav-list li a {
+        padding: 12px 15px;
+        display: block;
+        color: #333;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+      }
+
+      .nav-list li a:hover {
+        background-color: #f0f0f0;
+        text-decoration: none;
+      }
+
+      .main-content {
+        padding: 20px;
+        min-height: 80vh;
+        transition: opacity 0.3s ease;
+      }
+
+      .skip-link {
+        position: absolute;
+        top: -40px;
+        left: 10px;
+        background-color: lightskyblue;
+        color: #333;
+        padding: 10px 15px;
+        z-index: 10000;
+        text-decoration: none;
+        font-weight: bold;
+        border-radius: 4px;
+        transition: top 0.3s;
+      }
+
+      .skip-link:focus {
+        top: 10px;
+      }
+
+      /* View Transitions */
+      @view-transition {
+        navigation: auto;
+      }
+
+      /* Auth Pages */
+      .auth-page {
+        max-width: 400px;
+        margin: 40px auto;
+        padding: 30px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .auth-form {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .form-group label {
+        font-weight: bold;
+        color: #333;
+      }
+
+      .form-group input {
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+      }
+
+      .form-group input:focus {
+        outline: none;
+        border-color: lightskyblue;
+        box-shadow: 0 0 0 2px rgba(135, 206, 250, 0.2);
+      }
+
+      .submit-button {
+        padding: 12px;
+        background-color: lightskyblue;
         color: white;
         border: none;
-        border-radius: 25px;
+        border-radius: 4px;
+        font-size: 16px;
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 1000;
-        font-size: 14px;
-        font-weight: bold;
-        transition: all 0.3s ease;
+        transition: background-color 0.3s;
       }
 
-      .install-button:hover {
-        background: #1565c0;
+      .submit-button:hover {
+        background-color: #4da6ff;
+      }
+
+      .auth-link {
+        text-align: center;
+        margin-top: 20px;
+      }
+
+      .link {
+        color: lightskyblue;
+        text-decoration: none;
+      }
+
+      .link:hover {
+        text-decoration: underline;
+      }
+
+      /* Story Cards */
+      .story-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        padding: 20px 0;
+      }
+
+      .story-card {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s;
+      }
+
+      .story-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
       }
 
-      .install-button.hidden {
-        display: none;
+      .story-card img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
       }
 
-      .install-button:disabled {
-        background: #ccc;
-        cursor: not-allowed;
-        transform: none;
-      }</style><script defer="defer" src="/po1/main.bundle.js"></script><link href="/po1/main.css" rel="stylesheet"></head><body><a href="#main-content" class="skip-link" aria-label="Lewati ke Konten Utama">Lewati ke Konten Utama</a><header><div class="main-header container"><a class="brand-name" href="#/beranda">Cerita di Sekitarmu</a><nav id="navigation-drawer" class="navigation-drawer"><ul id="nav-list" class="nav-list"></ul></nav><button id="drawer-button" class="drawer-button">☰</button></div></header><main id="main-content" class="main-content" tabindex="-1"></main><script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script><script>// Enhanced PWA Installation dengan error handling
-      let deferredPrompt = null;
-      let installButton = null;
-      let isAppInstalled = false;
+      .story-content {
+        padding: 15px;
+      }
 
-      // Check jika app sudah terinstall
-      function checkIfAppInstalled() {
-        if (window.matchMedia("(display-mode: standalone)").matches) {
-          console.log("App is running in standalone mode");
-          isAppInstalled = true;
-          return true;
+      .story-content h3 {
+        margin-bottom: 10px;
+        color: #333;
+      }
+
+      .story-content p {
+        color: #666;
+        margin-bottom: 10px;
+      }
+
+      /* Map Container */
+      #map {
+        height: 400px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+      }
+
+      /* Navigation User */
+      .nav-user {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+      }
+
+      .user-name {
+        font-weight: bold;
+        color: #333;
+      }
+
+      .logout-button {
+        padding: 8px 15px;
+        background: #ff4757;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        .container {
+          padding-inline: 16px;
         }
 
-        // Check untuk browsers yang support getInstalledRelatedApps
-        if ("getInstalledRelatedApps" in navigator) {
-          navigator.getInstalledRelatedApps().then((apps) => {
-            if (apps.length > 0) {
-              console.log(
-                "App is installed (detected via getInstalledRelatedApps)"
-              );
-              isAppInstalled = true;
-            }
-          });
+        .story-list {
+          grid-template-columns: 1fr;
         }
 
-        return false;
-      }
-
-      // Register Service Worker dengan robust error handling
-      function registerServiceWorker() {
-        if ("serviceWorker" in navigator) {
-          // Tunggu sampai window fully loaded
-          if (document.readyState === "loading") {
-            window.addEventListener("load", initializeServiceWorker);
-          } else {
-            initializeServiceWorker();
-          }
-        } else {
-          console.log("Service Worker not supported in this browser");
+        .nav-user {
+          flex-direction: column;
+          align-items: flex-start;
         }
       }
 
-      async function initializeServiceWorker() {
-        try {
-          console.log("Initializing Service Worker...");
+      @media (min-width: 1024px) {
+        .navigation-drawer {
+          position: static;
+          width: auto;
+          min-height: auto;
+          transform: none;
+          box-shadow: none;
+          background: transparent;
+        }
 
-          // Tunggu sedikit untuk memastikan resources loaded
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+        .nav-list {
+          flex-direction: row;
+          margin-top: 0;
+        }
 
-          const registration = await navigator.serviceWorker.register(
-            "/sw.js",
-            {
-              scope: "/",
-            }
-          );
+        .drawer-button {
+          display: none;
+        }
+      }</style><script defer="defer" src="/po1/main.bundle.js"></script></head><body><a href="#main-content" class="skip-link" aria-label="Lewati ke Konten Utama">Lewati ke Konten Utama</a><header><div class="main-header container"><a class="brand-name" href="#/beranda">Cerita di Sekitarmu</a><nav id="navigation-drawer" class="navigation-drawer"><ul id="nav-list" class="nav-list"></ul></nav><button id="drawer-button" class="drawer-button" aria-label="Toggle navigation menu">☰</button></div></header><main id="main-content" class="main-content" tabindex="-1"><div style="text-align: center; padding: 40px"><h1>Memuat Aplikasi...</h1><p>Silakan tunggu sebentar.</p></div></main><script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script><script>// PWA Installation
+      let deferredPrompt;
 
-          console.log("Service Worker registered successfully:", registration);
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        console.log("PWA install prompt available");
+      });
 
-          // Track service worker state
-          if (registration.installing) {
-            console.log("Service Worker installing...");
-            registration.installing.addEventListener("statechange", (e) => {
-              console.log("Service Worker state:", e.target.state);
+      window.addEventListener("appinstalled", () => {
+        console.log("PWA installed successfully");
+        deferredPrompt = null;
+      });
+
+      // Service Worker Registration (Production only)
+      if (
+        "serviceWorker" in navigator &&
+        !window.location.hostname.includes("localhost")
+      ) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("/po1/sw.js")
+            .then((registration) => {
+              console.log("SW registered: ", registration);
+            })
+            .catch((registrationError) => {
+              console.log("SW registration failed: ", registrationError);
             });
-          } else if (registration.waiting) {
-            console.log("Service Worker waiting...");
-          } else if (registration.active) {
-            console.log("Service Worker active and ready!");
-          }
-
-          // Listen for updates
-          registration.addEventListener("updatefound", () => {
-            const newWorker = registration.installing;
-            console.log("New Service Worker found:", newWorker);
-
-            newWorker.addEventListener("statechange", () => {
-              console.log("New Service Worker state:", newWorker.state);
-              if (
-                newWorker.state === "installed" &&
-                navigator.serviceWorker.controller
-              ) {
-                console.log("New content available; please refresh.");
-              }
-            });
-          });
-
-          // Handle controller change
-          navigator.serviceWorker.addEventListener("controllerchange", () => {
-            console.log(
-              "Service Worker controller changed - page will refresh"
-            );
-            window.location.reload();
-          });
-        } catch (error) {
-          console.error("Service Worker registration failed:", error);
-
-          // Fallback: unregister problematic service worker
-          try {
-            const registrations =
-              await navigator.serviceWorker.getRegistrations();
-            for (let registration of registrations) {
-              await registration.unregister();
-              console.log("Unregistered problematic Service Worker");
-            }
-          } catch (unregisterError) {
-            console.error(
-              "Failed to unregister Service Worker:",
-              unregisterError
-            );
-          }
-        }
-      }
-
-      // Install Prompt Handler
-      function setupInstallPrompt() {
-        window.addEventListener("beforeinstallprompt", (e) => {
-          console.log("Before install prompt triggered");
-
-          // Prevent Chrome 67 and earlier from automatically showing the prompt
-          e.preventDefault();
-
-          // Stash the event so it can be triggered later
-          deferredPrompt = e;
-
-          // Update UI to notify the user they can install the PWA
-          console.log("App can be installed");
-
-          // Show install button after a short delay
-          setTimeout(showInstallPromotion, 3000);
         });
-
-        // Listen for app installation
-        window.addEventListener("appinstalled", (e) => {
-          console.log("App was successfully installed");
-          isAppInstalled = true;
-
-          if (installButton) {
-            installButton.classList.add("hidden");
-            installButton.disabled = true;
-          }
-
-          deferredPrompt = null;
-
-          // Analytics atau tracking bisa ditambahkan di sini
-          console.log("PWA installed successfully");
-        });
-      }
-
-      // Show install promotion button
-      function showInstallPromotion() {
-        // Don't show if already installed
-        if (isAppInstalled || checkIfAppInstalled()) {
-          console.log("Install promotion: App already installed");
-          return;
-        }
-
-        // Don't show if no deferred prompt
-        if (!deferredPrompt) {
-          console.log("Install promotion: No deferred prompt available");
-          return;
-        }
-
-        // Don't show if button already exists
-        if (installButton) {
-          return;
-        }
-
-        console.log("Showing install promotion button");
-
-        // Create install button
-        installButton = document.createElement("button");
-        installButton.textContent = "📱 Install Aplikasi";
-        installButton.className = "install-button";
-        installButton.setAttribute(
-          "aria-label",
-          "Install Cerita di Sekitarmu aplikasi"
-        );
-        installButton.setAttribute(
-          "title",
-          "Install aplikasi untuk pengalaman yang lebih baik"
-        );
-
-        // Add click handler
-        installButton.addEventListener("click", async () => {
-          if (!deferredPrompt) {
-            console.log("No deferred prompt available");
-            return;
-          }
-
-          console.log("Showing install prompt to user");
-
-          // Disable button while processing
-          installButton.textContent = "Menginstall...";
-          installButton.disabled = true;
-
-          try {
-            // Show the install prompt
-            deferredPrompt.prompt();
-
-            // Wait for the user to respond to the prompt
-            const { outcome } = await deferredPrompt.userChoice;
-
-            console.log(`User response to install prompt: ${outcome}`);
-
-            // We've used the prompt, and can't use it again, discard it
-            deferredPrompt = null;
-
-            if (outcome === "accepted") {
-              console.log("User accepted the install prompt");
-              installButton.classList.add("hidden");
-
-              // Optional: Track installation success
-              setTimeout(() => {
-                if (checkIfAppInstalled()) {
-                  console.log("App installation confirmed");
-                }
-              }, 1000);
-            } else {
-              console.log("User dismissed the install prompt");
-
-              // Re-enable button
-              installButton.textContent = "📱 Install Aplikasi";
-              installButton.disabled = false;
-
-              // Hide button for a while if user dismissed
-              setTimeout(() => {
-                if (installButton && !isAppInstalled) {
-                  installButton.style.display = "none";
-                  setTimeout(() => {
-                    if (installButton && !isAppInstalled) {
-                      installButton.style.display = "block";
-                    }
-                  }, 30000); // Show again after 30 seconds
-                }
-              }, 2000);
-            }
-          } catch (error) {
-            console.error("Error showing install prompt:", error);
-
-            // Re-enable button on error
-            installButton.textContent = "📱 Install Aplikasi";
-            installButton.disabled = false;
-          }
-        });
-
-        // Add button to page
-        document.body.appendChild(installButton);
-
-        // Auto-hide after 30 seconds if not clicked
-        setTimeout(() => {
-          if (installButton && !installButton.disabled && !isAppInstalled) {
-            installButton.style.display = "none";
-            console.log("Auto-hiding install button");
-          }
-        }, 30000);
-      }
-
-      // Periodic check for installability
-      function startInstallabilityCheck() {
-        setInterval(() => {
-          if (deferredPrompt && !installButton && !isAppInstalled) {
-            console.log("Periodic check: Showing install promotion");
-            showInstallPromotion();
-          }
-        }, 60000); // Check every minute
-      }
-
-      // Initialize everything when DOM is ready
-      function initializeApp() {
-        console.log("Initializing PWA features...");
-
-        // Check initial installation status
-        checkIfAppInstalled();
-
-        // Register Service Worker
-        registerServiceWorker();
-
-        // Setup install prompt
-        setupInstallPrompt();
-
-        // Start periodic checks
-        startInstallabilityCheck();
-
-        console.log("PWA features initialized successfully");
-      }
-
-      // Start initialization when DOM is ready
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", initializeApp);
-      } else {
-        initializeApp();
-      }
-
-      // Fallback: Manual service worker cleanup (for development)
-      window.cleanupServiceWorkers = async function () {
-        if ("serviceWorker" in navigator) {
-          try {
-            const registrations =
-              await navigator.serviceWorker.getRegistrations();
-            for (let registration of registrations) {
-              await registration.unregister();
-              console.log("Service Worker unregistered:", registration);
-            }
-            console.log("All Service Workers cleaned up");
-          } catch (error) {
-            console.error("Error cleaning up Service Workers:", error);
-          }
-        }
-      };
-
-      // Utility function untuk development
-      window.checkPWAStatus = function () {
-        return {
-          isAppInstalled: isAppInstalled,
-          hasDeferredPrompt: !!deferredPrompt,
-          hasInstallButton: !!installButton,
-          serviceWorker: navigator.serviceWorker
-            ? "supported"
-            : "not supported",
-        };
-      };</script></body></html>
+      }</script></body></html>
