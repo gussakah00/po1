@@ -10,11 +10,14 @@ module.exports = merge(common, {
     port: 3000,
     hot: true,
     open: true,
-    historyApiFallback: true,
+    historyApiFallback: {
+      index: "/", // Untuk SPA routing di development
+    },
   },
   plugins: [
     new webpack.DefinePlugin({
       "process.env.NODE_ENV": JSON.stringify("development"),
+      "process.env.BASE_PATH": JSON.stringify("/"),
     }),
   ],
 });

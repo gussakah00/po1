@@ -1,29 +1,33 @@
-const CACHE_NAME = "cerita-app-v4";
+// sw.js - Simple base path detection
+const getBasePath = () => {
+  const pathname = self.location.pathname;
+  if (pathname.includes("/po1/")) {
+    return "/po1/";
+  }
+  return "/";
+};
+
+const BASE_PATH = getBasePath();
+const CACHE_NAME = "cerita-app-v5";
 
 const STATIC_ASSETS = [
-  "/po1/",
-  "/po1/index.html",
-  "/po1/main.bundle.js",
-  "/po1/styles.css",
-  "/po1/icons/icon-72x72.png",
-  "/po1/icons/icon-96x96.png",
-  "/po1/icons/icon-128x128.png",
-  "/po1/icons/icon-144x144.png",
-  "/po1/icons/icon-152x152.png",
-  "/po1/icons/icon-192x192.png",
-  "/po1/icons/icon-384x384.png",
-  "/po1/icons/icon-512x512.png",
-  "/po1/app.webmanifest",
+  BASE_PATH,
+  BASE_PATH + "index.html",
+  BASE_PATH + "main.bundle.js",
+  BASE_PATH + "styles.css",
+  BASE_PATH + "icons/icon-192x192.png",
+  BASE_PATH + "icons/icon-512x512.png",
+  BASE_PATH + "app.webmanifest",
 ];
 
 self.addEventListener("install", (event) => {
-  console.log("🔧 Service Worker: Installing...");
+  console.log("🔧 Service Worker: Installing with base path:", BASE_PATH);
 
   event.waitUntil(
     caches
       .open(CACHE_NAME)
       .then((cache) => {
-        console.log("💾 Opening cache...");
+        console.log("💾 Caching static assets");
         return cache.addAll(STATIC_ASSETS);
       })
       .then(() => {
@@ -34,7 +38,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  console.log("🔧 Service Worker: Activating...");
+  console.log("🔧 Service Worker: Activating");
 
   event.waitUntil(
     Promise.all([
@@ -63,14 +67,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Skip cross-origin requests
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
+      // Return cached version if available
       if (response) {
         return response;
       }
 
+      // Otherwise fetch from network
       return fetch(event.request)
         .then((response) => {
+          // Cache successful responses
           if (response.status === 200) {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -80,19 +92,21 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => {
-          if (event.request.destination === "document") {
-            return caches.match("/po1/index.html");
+          // Fallback to index.html for navigation requests
+          if (event.request.mode === "navigate") {
+            return caches.match(BASE_PATH + "index.html");
           }
         });
     })
   );
 });
 
+// Push notifications (tetap sama)
 self.addEventListener("push", (event) => {
   const options = {
     body: "Ada cerita baru di sekitarmu! 📖",
-    icon: "/po1/icons/icon-192x192.png",
-    badge: "/po1/icons/icon-72x72.png",
+    icon: BASE_PATH + "icons/icon-192x192.png",
+    badge: BASE_PATH + "icons/icon-72x72.png",
     tag: "story-notification",
   };
 
@@ -107,12 +121,12 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     clients.matchAll({ type: "window" }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes("/po1/") && "focus" in client) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
           return client.focus();
         }
       }
       if (clients.openWindow) {
-        return clients.openWindow("/po1/#/beranda");
+        return clients.openWindow(BASE_PATH);
       }
     })
   );
